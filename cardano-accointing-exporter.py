@@ -187,6 +187,7 @@ for wallet in wallet_files:
     print('-- Reading wallet ' + wallet)
     csv_data = []
     stake_keys_calculated = set()
+    stake_key = None
     filename = wallet.split('.')[0] + '.csv'
     wallet_file = open(wallet, 'r')
     addresses = wallet_file.readlines()
