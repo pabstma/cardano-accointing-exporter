@@ -151,3 +151,5 @@ fabric.properties
 
 # Project specific
 cache.sqlite
+http_cache.sqlite
+wallets/
