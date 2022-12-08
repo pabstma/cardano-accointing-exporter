@@ -11,9 +11,9 @@ the toolchain needed to parse it.
 The script parses every file in the wallets/ subdirectory with the ending .wallet
 It is expected that a .wallet file contains exactly one address per line or exactly one stake key.
 
-0. Make sure you that python3 and a virtualenv is installed
-1. Create a free account at https://blockfrost.io/ and find your API key
-2. Put your API key into the api_key variable in the cardano-accointing-exporter.py
+0. Make sure you that python3 and virtualenv is installed
+1. Create a free account at https://blockfrost.io/ and find your project id.
+2. Put your project id into the PROJECT_ID variable in the config.py
 3. Create a wallets/ subdirectory in the scripts root directory
 4. Create a .wallet file for every wallet in the wallets/ subdirectory as described above
 5. Create a virtual environment 'virtualenv venv' and source it 'source venv/bin/activate'
@@ -28,6 +28,6 @@ execution the script may take its time. But it should be much faster in subseque
 
 Hint: If you have wallets with a high number of addresses you should be turning on caching for ALL queries (on default
 caching is disabled for queries that change frequently like transaction history of a wallet and reward history). If you
-don't do this and there occurs some error during execution the progress will be lost and you need to start over. There
-is no checkpointing! The downside of enabling caching for all queries is, that you won't get new transactions for the
-cached addresses. See the sections with with 'requests_cache.disabled()'.
+don't do this and there occurs some error during execution the progress will be lost, and you will need to start over again. 
+There is no checkpointing! The downside of enabling caching for all queries is, that you won't get new transactions for the
+cached addresses. See the sections with 'requests_cache.disabled()'.

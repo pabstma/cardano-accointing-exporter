@@ -7,7 +7,6 @@ PROJECT_ID = ''
 BASE_API = 'https://cardano-mainnet.blockfrost.io/api/v0/'
 SHELLEY_START_EPOCH = 208
 SHELLEY_START_DATETIME = datetime(2020, 7, 29, 21, 44, 51)
-CACHE_ALL = False
 
 
 def init():
