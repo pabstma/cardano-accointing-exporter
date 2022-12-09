@@ -115,7 +115,7 @@ for wallet in wallet_files:
             page = 1
             new_results = True
             while new_results:
-                addr_txs_r = blockfrost.request_api(BLOCKFROST_BASE_API + 'addresses/' + address + '/txs' + '?page=' + str(page))
+                addr_txs_r = blockfrost.request_api(BLOCKFROST_BASE_API + 'addresses/' + address + '/transactions' + '?page=' + str(page))
                 new_results = addr_txs_r.json()
                 addr_txs.append(addr_txs_r.json())
                 page += 1
@@ -126,9 +126,9 @@ for wallet in wallet_files:
         print('-- Get detailed transaction information')
         txs_details = []
         for tx in addr_txs:
-            print('---- for transaction ' + tx)
-            tx_details_r = blockfrost.request_api(BLOCKFROST_BASE_API + 'txs/' + tx)
-            txs_details.append([tx, tx_details_r.json()])
+            print('---- for transaction ' +  tx['tx_hash'])
+            tx_details_r = blockfrost.request_api(BLOCKFROST_BASE_API + 'txs/' + tx['tx_hash'])
+            txs_details.append([tx['tx_hash'], tx_details_r.json()])
 
         # Get blocks for transactions
         print('-- Get blocks for transactions')
