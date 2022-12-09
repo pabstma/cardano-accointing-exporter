@@ -11,6 +11,20 @@ def add_row(data, csv_data):
         csv_data.append(data)
 
 
+# Write csv data into file
+def write_data(filename, csv_data):
+    print('-- Sort calculated data')
+    sorted_data = sorted(csv_data, key=lambda x: datetime.strptime(x[1], '%m/%d/%Y %H:%M:%S'))
+    print('-- Aggregate UTXOs')
+    aggregated_data = aggregate_utxos(sorted_data, csv_data)
+    print('-- Write data on drive')
+    with open(filename, mode='w') as transactions_file:
+        transactions_writer = csv.writer(transactions_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        transactions_writer.writerow(csv_header)
+        for d in aggregated_data:
+            transactions_writer.writerow(d[:len(d)-2])
+
+
 # Aggregate the utxos of a transaction into one
 def aggregate_utxos(data, csv_data):
     aggregated_utxos = []
@@ -64,7 +78,7 @@ def aggregate_utxos(data, csv_data):
                 fee = ''
                 fee_asset = ''
                 classification = 'fee'
-            final_tx = ['withdraw', date, '', '', round(result, 6), 'ADA', fee, fee_asset, classification, operation_id]
+            final_tx = ['withdraw', date, '', '', round(result, 6), 'ADA', fee, fee_asset, classification, operation_id, '', '']
             add_row(final_tx, csv_data)
             aggregated_data.append(final_tx)
         elif transaction[9] not in seen_transactions:
@@ -72,20 +86,6 @@ def aggregate_utxos(data, csv_data):
             aggregated_data.append(tx_pair[0])
 
     return sorted(aggregated_data + rewards, key=lambda x: datetime.strptime(x[1], '%m/%d/%Y %H:%M:%S'))
-
-
-# Write csv data into file
-def write_data(filename, csv_data):
-    print('-- Sort calculated data')
-    sorted_data = sorted(csv_data, key=lambda x: datetime.strptime(x[1], '%m/%d/%Y %H:%M:%S'))
-    print('-- Aggregate UTXOs')
-    aggregated_data = aggregate_utxos(sorted_data, csv_data)
-    print('-- Write data on drive')
-    with open(filename, mode='w') as transactions_file:
-        transactions_writer = csv.writer(transactions_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        transactions_writer.writerow(csv_header)
-        for d in aggregated_data:
-            transactions_writer.writerow(d)
 
 
 def convert_csv_to_xlsx(csv_files):

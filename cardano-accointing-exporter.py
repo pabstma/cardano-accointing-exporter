@@ -86,7 +86,7 @@ for wallet in wallet_files:
                     reward_time = SHELLEY_START_DATETIME + timedelta(days=datetime_delta) + timedelta(days=10)
                     amount = int(reward['amount']) / 1000000
                     deposit = ['deposit', reward_time.strftime('%m/%d/%Y %H:%M:%S'), amount, 'ADA', '', '', '', '',
-                               'staked', '']
+                               'staked', '', '', '']
                     data_handler.add_row(deposit, csv_data)
             else:
                 print('---- skipping rewards already calculated for ' + stake_key)
@@ -191,7 +191,9 @@ for wallet in wallet_files:
                     quantity = int(amount[0]['quantity']) / 1000000
                     fee = int(i[1][1]['fees']) / 1000000
                     tx_hash = i[1][0]
-                    withdraw = ['withdraw', tx_time, '', '', quantity, 'ADA', fee, 'ADA', '', tx_hash]
+                    address = i[0]['address']
+                    output_index = i[0]['output_index']
+                    withdraw = ['withdraw', tx_time, '', '', quantity, 'ADA', fee, 'ADA', '', tx_hash, address, output_index]
                     data_handler.add_row(withdraw, csv_data)
 
         # Collect outputs
@@ -203,7 +205,9 @@ for wallet in wallet_files:
                     amount = o[0]['amount']
                     quantity = int(amount[0]['quantity']) / 1000000
                     tx_hash = o[1][0]
-                    deposit = ['deposit', tx_time, quantity, 'ADA', '', '', '', '', '', tx_hash]
+                    address = o[0]['address']
+                    output_index = o[0]['output_index']
+                    deposit = ['deposit', tx_time, quantity, 'ADA', '', '', '', '', '', tx_hash, address, output_index]
                     data_handler.add_row(deposit, csv_data)
 
         # Collect reward withdrawals
@@ -212,7 +216,7 @@ for wallet in wallet_files:
             tx_time = datetime.utcfromtimestamp(reward_withdrawal[1][2]).strftime('%m/%d/%Y %H:%M:%S')
             amount = reward_withdrawal[2][0]['amount']
             tx_hash = reward_withdrawal[1][0]
-            withdraw = ['withdraw', tx_time, '', '', int(amount) / 1000000, 'ADA', '', '', '', tx_hash]
+            withdraw = ['withdraw', tx_time, '', '', int(amount) / 1000000, 'ADA', '', '', '', tx_hash, '', '']
             data_handler.add_row(withdraw, csv_data)
 
     data_handler.write_data(filename, csv_data)
