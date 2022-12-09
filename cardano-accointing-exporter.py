@@ -126,49 +126,17 @@ for wallet in wallet_files:
         print('-- Get detailed transaction information')
         txs_details = []
         for tx in addr_txs:
-            print('---- for transaction ' +  tx['tx_hash'])
+            print('---- for transaction ' + tx['tx_hash'])
             tx_details_r = blockfrost.request_api(BLOCKFROST_BASE_API + 'txs/' + tx['tx_hash'])
-            txs_details.append([tx['tx_hash'], tx_details_r.json()])
-
-        # Get blocks for transactions
-        print('-- Get blocks for transactions')
-        blocks_for_txs = []
-        for tx in txs_details:
-            print('---- for transaction ' + tx[0])
-            blocks_for_txs.append(tx[1]['block'])
-
-        # Get block details
-        print("-- Get details")
-        block_details = []
-        for block in blocks_for_txs:
-            print('---- for block ' + block)
-            block_details_r = blockfrost.request_api(BLOCKFROST_BASE_API + 'blocks/' + block)
-            block_details.append(block_details_r.json())
-
-        # Get time for blocks
-        print('-- Get time for blocks')
-        block_times = []
-        for block in block_details:
-            print('---- for block ' + block['hash'])
-            block_time = block['time']
-            block_times.append(block_time)
-
-        # Combine tx with time
-        print('-- Combine tx with time')
-        tx_with_time = []
-        i = 0
-        for tx in txs_details:
-            print('---- for transaction ' + tx[0])
-            tx_with_time.append([tx[0], tx[1], block_times[i]])
-            i += 1
+            txs_details.append(tx_details_r.json())
 
         # Get UTXOs for all transactions
         print('-- Get transaction UTXOs')
         txs_utxos = []
 
-        for tx in tx_with_time:
-            print('---- for transaction ' + tx[0])
-            tx_utxo_r = blockfrost.request_api(BLOCKFROST_BASE_API + 'txs/' + tx[0] + '/utxos')
+        for tx in txs_details:
+            print('---- for transaction ' + tx['hash'])
+            tx_utxo_r = blockfrost.request_api(BLOCKFROST_BASE_API + 'txs/' + tx['hash'] + '/utxos')
             txs_utxos.append([tx_utxo_r.json(), tx])
 
         # Filter inputs and outputs
@@ -180,12 +148,11 @@ for wallet in wallet_files:
         for tx in txs_utxos:
             ins = tx[0]['inputs']
             outs = tx[0]['outputs']
-
-            if int(tx[1][1]['withdrawal_count']) > 0:
-                tx_withdrawal_r = blockfrost.request_api(BLOCKFROST_BASE_API + 'txs/' + tx[1][0] + '/withdrawals')
+            if int(tx[1]['withdrawal_count']) > 0:
+                tx_withdrawal_r = blockfrost.request_api(BLOCKFROST_BASE_API + 'txs/' + tx[0]['hash'] + '/withdrawals')
                 if stake_key == tx_withdrawal_r.json()[0]['address'] \
                         and [tx, tx_withdrawal_r.json()] not in reward_withdrawals:
-                    reward_withdrawals.append([tx[0], tx[1], tx_withdrawal_r.json()])
+                    reward_withdrawals.append([tx_withdrawal_r.json(), tx[1]])
 
             for i in ins:
                 if i['address'] in addresses:
@@ -200,11 +167,11 @@ for wallet in wallet_files:
         for addr in addresses:
             for i in inputs:
                 if addr in i[0]['address']:
-                    tx_time = datetime.utcfromtimestamp(i[1][2]).strftime('%m/%d/%Y %H:%M:%S')
+                    tx_time = datetime.utcfromtimestamp(i[1]['block_time']).strftime('%m/%d/%Y %H:%M:%S')
                     amount = i[0]['amount']
                     quantity = int(amount[0]['quantity']) / 1000000
-                    fee = int(i[1][1]['fees']) / 1000000
-                    tx_hash = i[1][0]
+                    fee = int(i[1]['fees']) / 1000000
+                    tx_hash = i[1]['hash']
                     address = i[0]['address']
                     output_index = i[0]['output_index']
                     withdraw = ['withdraw', tx_time, '', '', quantity, 'ADA', fee, 'ADA', '', tx_hash, '', address, output_index]
@@ -215,10 +182,10 @@ for wallet in wallet_files:
         for addr in addresses:
             for o in outputs:
                 if addr in o[0]['address']:
-                    tx_time = datetime.utcfromtimestamp(o[1][2]).strftime('%m/%d/%Y %H:%M:%S')
+                    tx_time = datetime.utcfromtimestamp(o[1]['block_time']).strftime('%m/%d/%Y %H:%M:%S')
                     amount = o[0]['amount']
                     quantity = int(amount[0]['quantity']) / 1000000
-                    tx_hash = o[1][0]
+                    tx_hash = o[1]['hash']
                     address = o[0]['address']
                     output_index = o[0]['output_index']
                     deposit = ['deposit', tx_time, quantity, 'ADA', '', '', '', '', '', tx_hash, '', address, output_index]
@@ -227,9 +194,9 @@ for wallet in wallet_files:
         # Collect reward withdrawals
         print('-- Calculate reward withdrawals')
         for reward_withdrawal in reward_withdrawals:
-            tx_time = datetime.utcfromtimestamp(reward_withdrawal[1][2]).strftime('%m/%d/%Y %H:%M:%S')
-            amount = reward_withdrawal[2][0]['amount']
-            tx_hash = reward_withdrawal[1][0]
+            tx_time = datetime.utcfromtimestamp(reward_withdrawal[1]['block_time']).strftime('%m/%d/%Y %H:%M:%S')
+            amount = reward_withdrawal[0][0]['amount']
+            tx_hash = reward_withdrawal[1]['hash']
             withdraw = ['withdraw', tx_time, '', '', int(amount) / 1000000, 'ADA', '', '', '', tx_hash, '', '', '']
             data_handler.add_row(withdraw, csv_data)
 
