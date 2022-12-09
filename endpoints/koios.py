@@ -3,15 +3,9 @@ import requests as requests
 import config
 
 from time import sleep
-from config import PROJECT_ID
-
-# HTTP header
-headers = {
-    'project_id': PROJECT_ID
-}
 
 
-# Function to request the api with simple builtin retry
+# Function to GET request the api with simple builtin retry
 def request_api(url):
     retries = 0
     response_code = None
@@ -19,7 +13,23 @@ def request_api(url):
         if retries > 0:
             sleep(retries * 5)
             print('Response code was: ' + str(response_code) + ' -> Retrying ' + str(retries) + '...')
-        response = requests.get(url, headers=headers)
+        response = requests.get(url)
+        response_code = response.status_code
+        check_cached(response)
+        config.request_time = time.time()
+        retries += 1
+    check_content(response)
+    return response
+
+# Function to POST request the api with a specific body and simple builtin retry
+def request_api(url, body):
+    retries = 0
+    response_code = None
+    while response_code != 200 and retries < 20:
+        if retries > 0:
+            sleep(retries * 5)
+            print('Response code was: ' + str(response_code) + ' -> Retrying ' + str(retries) + '...')
+        response = requests.post(url, json=body)
         response_code = response.status_code
         check_cached(response)
         config.request_time = time.time()

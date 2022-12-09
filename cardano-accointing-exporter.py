@@ -1,11 +1,14 @@
 import glob
-import requests_cache
-import data_handler
-
+import time as time
 from datetime import timedelta, datetime
-from blockfrost import *
-from config import BASE_API, SHELLEY_START_EPOCH, SHELLEY_START_DATETIME
-from helper import *
+import requests_cache
+import endpoints.blockfrost as blockfrost
+import endpoints.koios as koios
+import config
+
+from shared import data_handler
+from config import BLOCKFROST_BASE_API, SHELLEY_START_EPOCH, SHELLEY_START_DATETIME, KOIOS_BASE_API
+from shared.helper import *
 
 # Variables
 wallet_files = glob.glob('wallets/*.wallet')
@@ -22,6 +25,7 @@ requests_cache.install_cache(expire_after=None)
 for wallet in wallet_files:
 
     calculated_wallet_counter += 1
+    reward_counter = 0
     print('Calculating wallet ' + str(calculated_wallet_counter) + ' of ' + str(wallet_counter))
     print('-- Reading wallet ' + wallet)
     csv_data = []
@@ -41,7 +45,7 @@ for wallet in wallet_files:
         stake_key = addresses[0]
         addresses = []
         while new_results:
-            addresses_r = request_api(BASE_API + 'accounts/' + stake_key + '/addresses' + '?page=' + str(page))
+            addresses_r = blockfrost.request_api(BLOCKFROST_BASE_API + 'accounts/' + stake_key + '/addresses' + '?page=' + str(page))
             new_results = addresses_r.json()
             page += 1
             for address in addresses_r.json():
@@ -59,11 +63,11 @@ for wallet in wallet_files:
         print('Calculating address ' + str(calculated_address_counter) + ' of ' + str(address_counter))
 
         # Address request
-        addr_r = request_api(BASE_API + 'addresses/' + address)
+        addr_r = blockfrost.request_api(BLOCKFROST_BASE_API + 'addresses/' + address)
         if stake_key is None:
             stake_key = addr_r.json()['stake_address']
 
-        # Reward History
+        # Reward history
         print('-- Get reward history')
         reward_history_r = None
         reward_history = []
@@ -71,22 +75,32 @@ for wallet in wallet_files:
             if stake_key not in stake_keys_calculated:
                 print('---- for stake key ' + stake_key)
                 with requests_cache.disabled():
-                    page = 1
+                    offset = 0
                     new_results = True
                     while new_results:
-                        reward_history_r = request_api(BASE_API + 'accounts/' + stake_key + '/rewards' + '?page=' + str(page))
+                        body = {"_stake_addresses": [stake_key]}
+                        reward_history_r = koios.request_api(KOIOS_BASE_API + 'account_rewards' + '?offset=' + str(offset), body)
                         new_results = reward_history_r.json()
                         reward_history.append(reward_history_r.json())
-                        page += 1
+                        offset += 1000
 
                 reward_history = [item for sublist in reward_history for item in sublist]
 
-                for reward in reward_history:
-                    datetime_delta = (reward['epoch'] - SHELLEY_START_EPOCH) * 5
+                for reward in reward_history[0]['rewards']:
+                    reward_counter += 1
+                    datetime_delta = (reward['earned_epoch'] - SHELLEY_START_EPOCH) * 5
                     reward_time = SHELLEY_START_DATETIME + timedelta(days=datetime_delta) + timedelta(days=10)
                     amount = int(reward['amount']) / 1000000
+                    reward_type = reward['type']
+                    classification = ""
+                    if reward_type == 'member':
+                        classification = 'staked'
+                    elif reward_type == 'leader':
+                        classification = 'master_node'
+                    elif reward_type == 'treasury' or reward_type == 'reserves':
+                        classification = 'bounty'
                     deposit = ['deposit', reward_time.strftime('%m/%d/%Y %H:%M:%S'), amount, 'ADA', '', '', '', '',
-                               'staked', '', '', '']
+                               classification, '', '', '', reward_counter]
                     data_handler.add_row(deposit, csv_data)
             else:
                 print('---- skipping rewards already calculated for ' + stake_key)
@@ -101,7 +115,7 @@ for wallet in wallet_files:
             page = 1
             new_results = True
             while new_results:
-                addr_txs_r = request_api(BASE_API + 'addresses/' + address + '/txs' + '?page=' + str(page))
+                addr_txs_r = blockfrost.request_api(BLOCKFROST_BASE_API + 'addresses/' + address + '/txs' + '?page=' + str(page))
                 new_results = addr_txs_r.json()
                 addr_txs.append(addr_txs_r.json())
                 page += 1
@@ -113,7 +127,7 @@ for wallet in wallet_files:
         txs_details = []
         for tx in addr_txs:
             print('---- for transaction ' + tx)
-            tx_details_r = request_api(BASE_API + 'txs/' + tx)
+            tx_details_r = blockfrost.request_api(BLOCKFROST_BASE_API + 'txs/' + tx)
             txs_details.append([tx, tx_details_r.json()])
 
         # Get blocks for transactions
@@ -128,7 +142,7 @@ for wallet in wallet_files:
         block_details = []
         for block in blocks_for_txs:
             print('---- for block ' + block)
-            block_details_r = request_api(BASE_API + 'blocks/' + block)
+            block_details_r = blockfrost.request_api(BLOCKFROST_BASE_API + 'blocks/' + block)
             block_details.append(block_details_r.json())
 
         # Get time for blocks
@@ -154,7 +168,7 @@ for wallet in wallet_files:
 
         for tx in tx_with_time:
             print('---- for transaction ' + tx[0])
-            tx_utxo_r = request_api(BASE_API + 'txs/' + tx[0] + '/utxos')
+            tx_utxo_r = blockfrost.request_api(BLOCKFROST_BASE_API + 'txs/' + tx[0] + '/utxos')
             txs_utxos.append([tx_utxo_r.json(), tx])
 
         # Filter inputs and outputs
@@ -168,7 +182,7 @@ for wallet in wallet_files:
             outs = tx[0]['outputs']
 
             if int(tx[1][1]['withdrawal_count']) > 0:
-                tx_withdrawal_r = request_api(BASE_API + 'txs/' + tx[1][0] + '/withdrawals')
+                tx_withdrawal_r = blockfrost.request_api(BLOCKFROST_BASE_API + 'txs/' + tx[1][0] + '/withdrawals')
                 if stake_key == tx_withdrawal_r.json()[0]['address'] \
                         and [tx, tx_withdrawal_r.json()] not in reward_withdrawals:
                     reward_withdrawals.append([tx[0], tx[1], tx_withdrawal_r.json()])
@@ -193,7 +207,7 @@ for wallet in wallet_files:
                     tx_hash = i[1][0]
                     address = i[0]['address']
                     output_index = i[0]['output_index']
-                    withdraw = ['withdraw', tx_time, '', '', quantity, 'ADA', fee, 'ADA', '', tx_hash, address, output_index]
+                    withdraw = ['withdraw', tx_time, '', '', quantity, 'ADA', fee, 'ADA', '', tx_hash, '', address, output_index]
                     data_handler.add_row(withdraw, csv_data)
 
         # Collect outputs
@@ -207,7 +221,7 @@ for wallet in wallet_files:
                     tx_hash = o[1][0]
                     address = o[0]['address']
                     output_index = o[0]['output_index']
-                    deposit = ['deposit', tx_time, quantity, 'ADA', '', '', '', '', '', tx_hash, address, output_index]
+                    deposit = ['deposit', tx_time, quantity, 'ADA', '', '', '', '', '', tx_hash, '', address, output_index]
                     data_handler.add_row(deposit, csv_data)
 
         # Collect reward withdrawals
@@ -216,7 +230,7 @@ for wallet in wallet_files:
             tx_time = datetime.utcfromtimestamp(reward_withdrawal[1][2]).strftime('%m/%d/%Y %H:%M:%S')
             amount = reward_withdrawal[2][0]['amount']
             tx_hash = reward_withdrawal[1][0]
-            withdraw = ['withdraw', tx_time, '', '', int(amount) / 1000000, 'ADA', '', '', '', tx_hash, '', '']
+            withdraw = ['withdraw', tx_time, '', '', int(amount) / 1000000, 'ADA', '', '', '', tx_hash, '', '', '']
             data_handler.add_row(withdraw, csv_data)
 
     data_handler.write_data(filename, csv_data)
