@@ -1,7 +1,11 @@
 import csv
+import time
+
 import pandas as pd
+import config
 
 from datetime import datetime
+from config import LINE_CLEAR
 from exporters.accointing import csv_header
 
 
@@ -15,7 +19,7 @@ def add_row(data, csv_data):
 def write_data(filename, csv_data):
     print('-- Sort calculated data')
     sorted_data = sorted(csv_data, key=lambda x: datetime.strptime(x[1], '%m/%d/%Y %H:%M:%S'))
-    print('-- Aggregate UTXOs')
+    print('-- Construct transactional data')
     aggregated_data = aggregate_utxos(sorted_data, csv_data)
     print('-- Write data on drive')
     with open(filename, mode='w') as transactions_file:
@@ -32,7 +36,11 @@ def aggregate_utxos(data, csv_data):
     seen_deposit = []
     seen_withdraw = []
 
+    c = 1
     for d in data:
+        config.elapsed_time = time.time() - config.start_time
+        print(LINE_CLEAR + '---- Aggregated UTXOs: ' + str(c) + '/' + str(len(data)) + ' - Elapsed Time: ' + str(round(config.elapsed_time, 2)), end='\r')
+        c += 1
         tx_type = d[0]
         tx_time = d[1]
         tx_id = d[9]
@@ -57,12 +65,19 @@ def aggregate_utxos(data, csv_data):
                            aggregated_utxos)):
             aggregated_utxos.append(aggregate)
 
+
     # Build transaction fees and deposits
+    print()
+    print('---- Build transactions and rewards list')
     transactions = list(filter(lambda x: x[9] != '', aggregated_utxos))
     rewards = list(filter(lambda x: x[9] == '', data))
     seen_transactions = []
 
+    c = 1
     for transaction in transactions:
+        config.elapsed_time = time.time() - config.start_time
+        print(LINE_CLEAR + '---- Aggregated transactions: ' + str(c) + '/' + str(len(transactions)) + ' - Elapsed Time: ' + str(round(config.elapsed_time, 2)), end='\r')
+        c += 1
         tx_pair = list(filter(lambda x: x[9] == transaction[9], transactions))
         tx_pair = sorted(tx_pair, key=lambda x: x[0], reverse=True)
 
@@ -89,6 +104,7 @@ def aggregate_utxos(data, csv_data):
         elif transaction[9] not in seen_transactions:
             seen_transactions.append(transaction[9])
             aggregated_data.append(tx_pair[0])
+    print()
     return sorted((aggregated_data + rewards), key=lambda x: datetime.strptime(x[1], '%m/%d/%Y %H:%M:%S'))
 
 

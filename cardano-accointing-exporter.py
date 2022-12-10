@@ -51,11 +51,12 @@ for wallet in config.wallet_files:
     # Wallet Transaction History
     for address in addresses:
 
+        config.tx_counter = 0
         config.calculated_address_counter += 1
         clear()
         config.elapsed_time = time.time() - config.start_time
         print()
-        print('Calculating wallet ' + str(config.calculated_wallet_counter) + ' of ' + str(config.wallet_counter) + ' - Elapsed Time: ' + str(round(config.elapsed_time, 2)))
+        print('Calculating wallet ' + str(config.calculated_wallet_counter) + ' of ' + str(config.wallet_counter))
         print('Calculating address ' + str(config.calculated_address_counter) + ' of ' + str(config.address_counter))
 
         # Address request
@@ -114,9 +115,9 @@ for wallet in config.wallet_files:
                 addr_txs_r = blockfrost.request_api(BLOCKFROST_BASE_API + 'addresses/' + address + '/transactions' + '?page=' + str(page))
                 new_results = addr_txs_r.json()
                 addr_txs.append(addr_txs_r.json())
-                config.elapsed_time = time.time() - config.start_time
                 config.tx_counter += len(new_results)
                 page += 1
+                config.elapsed_time = time.time() - config.start_time
                 print(LINE_CLEAR + '---- Received ' + str(config.tx_counter) + ' TXs - Elapsed Time: ' + str(round(config.elapsed_time, 2)), end='\r')
 
         addr_txs = [item for sublist in addr_txs for item in sublist]
@@ -124,19 +125,24 @@ for wallet in config.wallet_files:
         # Get detailed transaction information
         print('\n-- Get detailed transaction information')
         txs_details = []
+        c = 1
         for tx in addr_txs:
-            print(LINE_CLEAR + '---- for transaction ' + tx['tx_hash'], end='\r')
+            config.elapsed_time = time.time() - config.start_time
+            print(LINE_CLEAR + '---- for transaction ' + tx['tx_hash'] + ' - Computed TXs: ' + str(c) + '/' + str(config.tx_counter) + ' - Elapsed Time: ' + str(round(config.elapsed_time, 2)), end='\r')
             tx_details_r = blockfrost.request_api(BLOCKFROST_BASE_API + 'txs/' + tx['tx_hash'])
             txs_details.append(tx_details_r.json())
+            c += 1
 
         # Get UTXOs for all transactions
         print('\n-- Get transaction UTXOs')
         txs_utxos = []
-
+        c = 1
         for tx in txs_details:
-            print(LINE_CLEAR + '---- for transaction ' + tx['hash'], end='\r')
+            config.elapsed_time = time.time() - config.start_time
+            print(LINE_CLEAR + '---- for transaction ' + tx['hash'] + ' - Computed TXs: ' + str(c) + '/' + str(config.tx_counter) + ' - Elapsed Time: ' + str(round(config.elapsed_time, 2)), end='\r')
             tx_utxo_r = blockfrost.request_api(BLOCKFROST_BASE_API + 'txs/' + tx['hash'] + '/utxos')
             txs_utxos.append([tx_utxo_r.json(), tx])
+            c += 1
 
         # Filter inputs and outputs
         print('\n-- Filter inputs and outputs')
