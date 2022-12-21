@@ -15,7 +15,7 @@ headers = {
 def request_api(url):
     retries = 0
     response_code = None
-    while response_code != 200 and retries < 20:
+    while response_code != 200 and retries <= 20:
         if retries > 0:
             sleep(retries * 5)
             print('Response code was: ' + str(response_code) + ' -> Retrying ' + str(retries) + '...')
@@ -24,6 +24,9 @@ def request_api(url):
         check_cached(response)
         config.request_time = time.time()
         retries += 1
+    if response_code != 200:
+        print('Response code was: ' + str(response_code) + ' -> Exiting after 20 retries...')
+        exit(1)
     check_content(response)
     return response
 

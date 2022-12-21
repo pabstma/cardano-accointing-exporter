@@ -83,22 +83,23 @@ for wallet in config.wallet_files:
 
                 reward_history = [item for sublist in reward_history for item in sublist]
 
-                for reward in reward_history[0]['rewards']:
-                    config.reward_counter += 1
-                    datetime_delta = (reward['earned_epoch'] - SHELLEY_START_EPOCH) * 5
-                    reward_time = SHELLEY_START_DATETIME + timedelta(days=datetime_delta) + timedelta(days=10)
-                    amount = int(reward['amount']) / 1000000
-                    reward_type = reward['type']
-                    classification = ""
-                    if reward_type == 'member':
-                        classification = 'staked'
-                    elif reward_type == 'leader':
-                        classification = 'master_node'
-                    elif reward_type == 'treasury' or reward_type == 'reserves':
-                        classification = 'bounty'
-                    deposit = ['deposit', reward_time.strftime('%m/%d/%Y %H:%M:%S'), amount, 'ADA', '', '', '', '',
-                               classification, '', '', '', config.reward_counter]
-                    data_handler.add_row(deposit, csv_data)
+                if len(reward_history) > 0:
+                    for reward in reward_history[0]['rewards']:
+                        config.reward_counter += 1
+                        datetime_delta = (reward['earned_epoch'] - SHELLEY_START_EPOCH) * 5
+                        reward_time = SHELLEY_START_DATETIME + timedelta(days=datetime_delta) + timedelta(days=10)
+                        amount = int(reward['amount']) / 1000000
+                        reward_type = reward['type']
+                        classification = ""
+                        if reward_type == 'member':
+                            classification = 'staked'
+                        elif reward_type == 'leader':
+                            classification = 'master_node'
+                        elif reward_type == 'treasury' or reward_type == 'reserves':
+                            classification = 'bounty'
+                        deposit = ['deposit', reward_time.strftime('%m/%d/%Y %H:%M:%S'), amount, 'ADA', '', '', '', '',
+                                   classification, '', '', '', config.reward_counter]
+                        data_handler.add_row(deposit, csv_data)
             else:
                 print('---- skipping rewards already calculated for ' + stake_key)
         else:
