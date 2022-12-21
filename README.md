@@ -24,10 +24,8 @@ It will output two files for every found .wallet file: a .csv and a .xlsx file
 The xlsx file can be directly imported into accointing.
 
 This script also caches already requested data. Thus reducing the api calls to blockfrost significantly. At the first
-execution the script may take its time. But it should be much faster in subsequent runs.
-
-Hint: If you have wallets with a high number of addresses you should be turning on caching for ALL queries (on default
-caching is disabled for queries that change frequently like transaction history of a wallet and reward history). If you
-don't do this and there occurs some error during execution the progress will be lost, and you will need to start over again. 
-There is no checkpointing! The downside of enabling caching for all queries is, that you won't get new transactions for the
-cached addresses. See the sections with 'requests_cache.disabled()'.
+execution the script may take its time. But it should be much faster in subsequent runs. Data that does not change e.g.
+old blocks or transactions are cached indefinitely. Data that frequently changes expires in the cache after a 
+configurable amount of time. The default expiry for an accounts reward history is 5 days and for the transactions of an 
+address 24 hours. Thus, no new rewards or transactions will be recognized within these 5 days or 24 hours caching 
+period. You can always adjust those caching times to your needs in the config.py file.

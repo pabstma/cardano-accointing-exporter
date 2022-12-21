@@ -7,13 +7,14 @@ import endpoints.koios as koios
 import config
 
 from shared import data_handler
-from config import BLOCKFROST_BASE_API, SHELLEY_START_EPOCH, SHELLEY_START_DATETIME, KOIOS_BASE_API, LINE_CLEAR
+from config import BLOCKFROST_BASE_API, SHELLEY_START_EPOCH, SHELLEY_START_DATETIME, KOIOS_BASE_API, LINE_CLEAR, URLS_EXPIRE_AFTER
 from shared.helper import *
 
 
 # Start of the script itself
 config.init()
-requests_cache.install_cache(expire_after=None)
+requests_cache.install_cache(expire_after=None, urls_expire_after=URLS_EXPIRE_AFTER)
+
 
 for wallet in config.wallet_files:
 
@@ -71,15 +72,14 @@ for wallet in config.wallet_files:
         if stake_key is not None:
             if stake_key not in stake_keys_calculated:
                 print('---- for stake key ' + stake_key)
-                with requests_cache.disabled():
-                    offset = 0
-                    new_results = True
-                    while new_results:
-                        body = {"_stake_addresses": [stake_key]}
-                        reward_history_r = koios.request_api(KOIOS_BASE_API + 'account_rewards' + '?offset=' + str(offset), body)
-                        new_results = reward_history_r.json()
-                        reward_history.append(reward_history_r.json())
-                        offset += 1000
+                offset = 0
+                new_results = True
+                while new_results:
+                    body = {"_stake_addresses": [stake_key]}
+                    reward_history_r = koios.request_api(KOIOS_BASE_API + 'account_rewards' + '?offset=' + str(offset), body)
+                    new_results = reward_history_r.json()
+                    reward_history.append(reward_history_r.json())
+                    offset += 1000
 
                 reward_history = [item for sublist in reward_history for item in sublist]
 
@@ -109,17 +109,16 @@ for wallet in config.wallet_files:
         # Get all transactions for a specific address
         print('-- Get all transactions for ' + address)
         addr_txs = []
-        with requests_cache.disabled():
-            page = 1
-            new_results = True
-            while new_results:
-                addr_txs_r = blockfrost.request_api(BLOCKFROST_BASE_API + 'addresses/' + address + '/transactions' + '?page=' + str(page))
-                new_results = addr_txs_r.json()
-                addr_txs.append(addr_txs_r.json())
-                config.tx_counter += len(new_results)
-                page += 1
-                config.elapsed_time = time.time() - config.start_time
-                print(LINE_CLEAR + '---- Received ' + str(config.tx_counter) + ' TXs - Elapsed Time: ' + str(round(config.elapsed_time, 2)), end='\r')
+        page = 1
+        new_results = True
+        while new_results:
+            addr_txs_r = blockfrost.request_api(BLOCKFROST_BASE_API + 'addresses/' + address + '/transactions' + '?page=' + str(page))
+            new_results = addr_txs_r.json()
+            addr_txs.append(addr_txs_r.json())
+            config.tx_counter += len(new_results)
+            page += 1
+            config.elapsed_time = time.time() - config.start_time
+            print(LINE_CLEAR + '---- Received ' + str(config.tx_counter) + ' TXs - Elapsed Time: ' + str(round(config.elapsed_time, 2)), end='\r')
 
         addr_txs = [item for sublist in addr_txs for item in sublist]
 
