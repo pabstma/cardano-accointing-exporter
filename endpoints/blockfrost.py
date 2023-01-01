@@ -1,9 +1,13 @@
 import time
-import requests as requests
-import config
-
+from datetime import timezone
 from time import sleep
-from config import PROJECT_ID
+
+import requests as requests
+from requests import Response
+
+import config
+from config import PROJECT_ID, BLOCKFROST_BASE_API
+from shared.representations import *
 
 # HTTP header
 headers = {
@@ -12,7 +16,7 @@ headers = {
 
 
 # Function to request the api with simple builtin retry
-def request_api(url):
+def request_api(url: str) -> Response:
     retries = 0
     response_code = None
     while response_code != 200 and retries <= 20:
@@ -27,12 +31,13 @@ def request_api(url):
     if response_code != 200:
         print('Response code was: ' + str(response_code) + ' -> Exiting after 20 retries...')
         exit(1)
-    check_content(response)
+        check_content(response)
+
     return response
 
 
 # Function to check if the response was cached; needed for limiting api requests
-def check_cached(response):
+def check_cached(response: Response) -> None:
     config.elapsed_time = time.time() - config.start_time
     elapsed_since_request = time.time() - config.request_time
     if not getattr(response, 'from_cache', False):
@@ -44,7 +49,114 @@ def check_cached(response):
 
 
 # Check if the received response content type is json
-def check_content(response):
-    if 'json' not in response.headers.get('Content-Type'):
-        print('The content type of the received data is not json but ' + response.headers)
+def check_content(response: Response) -> None:
+    if response is not None:
+        if 'json' not in response.headers.get('Content-Type'):
+            print('The content type of the received data is not json but ' + response.headers)
+            exit(1)
+    else:
+        print('No response was received -> Exiting...')
         exit(1)
+
+
+def get_addresses_for_account(stake_addr: str) -> List[Address]:
+    # Get all addresses for the given stake key
+    page = 1
+    addresses_r = True
+    addresses = []
+    while addresses_r:
+        addresses_r = request_api(BLOCKFROST_BASE_API + 'accounts/' + stake_addr + '/addresses' + '?page=' + str(page)).json()
+        page += 1
+        for address in addresses_r:
+            addresses.append(Address(address['address'], [], []))
+    return addresses
+
+
+def get_controlled_amount_for_account(stake_addr: str) -> int:
+    return int(request_api(BLOCKFROST_BASE_API + 'accounts/' + stake_addr).json()['controlled_amount'])
+
+
+def get_amount_for_address(addr: str) -> int:
+    return int(request_api(BLOCKFROST_BASE_API + 'addresses/' + addr).json()['amount'][0]['quantity'])
+
+
+def get_active_status_for_account(stake_addr: str) -> bool:
+    return bool(request_api(BLOCKFROST_BASE_API + 'accounts/' + stake_addr).json()['active'])
+
+
+def get_stake_addr_for_addr(addr: str) -> str:
+    return str(request_api(BLOCKFROST_BASE_API + 'addresses/' + addr).json()['stake_address'])
+
+
+def get_transaction_history_for_addr(addr: str) -> List[Transaction]:
+    txs_history = []
+    txs = []
+    page = 1
+    addr_txs_r = True
+    while addr_txs_r:
+        addr_txs_r = request_api(BLOCKFROST_BASE_API + 'addresses/' + addr + '/transactions' + '?page=' + str(page)).json()
+        txs_history.append(addr_txs_r)
+        config.tx_counter += len(addr_txs_r)
+        page += 1
+        config.elapsed_time = time.time() - config.start_time
+
+    txs_history = [item for sublist in txs_history for item in sublist]
+
+    if len(txs_history) > 0:
+        for tx in txs_history:
+            tx_details = __get_detailed_tx_information(tx['tx_hash'])
+            txs.append(Transaction(tx['tx_hash'],
+                                   datetime.fromtimestamp(tx['block_time'], timezone.utc),
+                                   __get_output_amount_for_transaction(tx['tx_hash']),
+                                   int(tx_details['fees']),
+                                   0,
+                                   0,
+                                   int(tx_details['utxo_count']),
+                                   int(tx_details['withdrawal_count']),
+                                   int(tx_details['mir_cert_count']),
+                                   int(tx_details['delegation_count']),
+                                   int(tx_details['stake_cert_count']),
+                                   int(tx_details['pool_update_count']),
+                                   int(tx_details['pool_retire_count']),
+                                   __get_inputs_for_transaction(tx['tx_hash']),
+                                   __get_outputs_for_transaction(tx['tx_hash'])))
+
+    return txs
+
+
+def get_withdrawal_for_transaction(tx_hash: str) -> Response:
+    return request_api(BLOCKFROST_BASE_API + 'txs/' + tx_hash + '/withdrawals')
+
+
+def __get_output_amount_for_transaction(tx_hash: str) -> List[Tuple[str, int]]:
+    output_amount = request_api(BLOCKFROST_BASE_API + 'txs/' + tx_hash).json()['output_amount']
+    output_amounts = []
+    for o in output_amount:
+        output_amounts.append((o['unit'], int(o['quantity'])))
+    return output_amounts
+
+
+def __get_detailed_tx_information(tx_hash: str):
+    return request_api(BLOCKFROST_BASE_API + 'txs/' + tx_hash).json()
+
+
+def __get_inputs_for_transaction(tx_hash: str) -> List[Input]:
+    tx_utxos_r = request_api(BLOCKFROST_BASE_API + 'txs/' + tx_hash + '/utxos').json()
+    tx_utxos = []
+
+    for tx_input in tx_utxos_r['inputs']:
+        tx_utxos.append(Input(tx_input['address'], [(tx_input['amount'][0]['unit'], int(tx_input['amount'][0]['quantity']))], tx_hash,
+                              tx_input['output_index'], tx_input['collateral']))
+
+    return tx_utxos
+
+
+def __get_outputs_for_transaction(tx_hash: str) -> List[Output]:
+    tx_utxos_r = request_api(BLOCKFROST_BASE_API + 'txs/' + tx_hash + '/utxos').json()
+    tx_utxos = []
+
+    for tx_output in tx_utxos_r['outputs']:
+        tx_utxos.append(Output(tx_output['address'], [(tx_output['amount'][0]['unit'], int(tx_output['amount'][0]['quantity']))], tx_hash,
+                               tx_output['output_index'], tx_output['collateral']))
+
+    return tx_utxos

@@ -1,215 +1,135 @@
 import glob
-import time as time
-from datetime import timedelta, datetime
+import math
+import time
+
 import requests_cache
+
+import config
 import endpoints.blockfrost as blockfrost
 import endpoints.koios as koios
-import config
-
-from shared import data_handler
-from config import BLOCKFROST_BASE_API, SHELLEY_START_EPOCH, SHELLEY_START_DATETIME, KOIOS_BASE_API, LINE_CLEAR, URLS_EXPIRE_AFTER
-from shared.helper import *
-
-
-# Start of the script itself
-config.init()
-requests_cache.install_cache(expire_after=None, urls_expire_after=URLS_EXPIRE_AFTER)
+import exporters
+from config import URLS_EXPIRE_AFTER, LINE_CLEAR
+from exporters.accointing import export_reward_history_for_wallet, export_transaction_history_for_transactions
+from shared.data_handler import extract_addresses_from_file, add_row, calculate_derived_tx, write_data, convert_csv_to_xlsx
+from shared.helper import clear
+from shared.representations import Wallet
 
 
-for wallet in config.wallet_files:
+def main():
+    config.init()
+    requests_cache.install_cache(expire_after=None, urls_expire_after=URLS_EXPIRE_AFTER)
+    requests_cache.remove_expired_responses()
 
-    config.calculated_wallet_counter += 1
-    config.tx_counter = 0
-    config.reward_counter = 0
+    for wallet_file in config.wallet_files:
 
-    print('Calculating wallet ' + str(config.calculated_wallet_counter) + ' of ' + str(config.wallet_counter))
-    print('-- Reading wallet ' + wallet)
-    csv_data = []
-    stake_keys_calculated = set()
-    stake_key = None
-    filename = wallet.split('.')[0] + '.csv'
-    wallet_file = open(wallet, 'r')
-    addresses = wallet_file.readlines()
-    for i in range(0, len(addresses)):
-        addresses[i] = addresses[i].strip()
+        current_wallet = Wallet('', 0, [], [], [], False)
+        config.wallets.append(current_wallet)
 
-    if len(addresses) == 1 and addresses[0].startswith('stake1u'):
-        print('---- Stake key detected ' + addresses[0])
-        print('------ Get addresses for ' + addresses[0])
-        page = 1
-        new_results = True
-        stake_key = addresses[0]
-        addresses = []
-        while new_results:
-            addresses_r = blockfrost.request_api(BLOCKFROST_BASE_API + 'accounts/' + stake_key + '/addresses' + '?page=' + str(page))
-            new_results = addresses_r.json()
-            page += 1
-            for address in addresses_r.json():
-                addresses.append(address['address'])
-                print('-------- Address found ' + address['address'], end='\r')
-
-    config.address_counter += len(addresses)
-    # Wallet Transaction History
-    for address in addresses:
-
+        config.calculated_wallet_counter += 1
         config.tx_counter = 0
-        config.calculated_address_counter += 1
-        clear()
-        config.elapsed_time = time.time() - config.start_time
-        print()
+        config.reward_counter = 0
+
         print('Calculating wallet ' + str(config.calculated_wallet_counter) + ' of ' + str(config.wallet_counter))
-        print('Calculating address ' + str(config.calculated_address_counter) + ' of ' + str(config.address_counter))
+        print('-- Reading wallet ' + wallet_file)
+        csv_data = []
+        stake_keys_calculated = set()
+        current_wallet.stake_address = None
+        filename = wallet_file.split('.')[0] + '.csv'
 
-        # Address request
-        addr_r = blockfrost.request_api(BLOCKFROST_BASE_API + 'addresses/' + address)
-        if stake_key is None:
-            stake_key = addr_r.json()['stake_address']
+        current_wallet.addresses = extract_addresses_from_file(wallet_file)
+        if len(current_wallet.addresses) == 1 and current_wallet.addresses[0].address.startswith('stake1u'):
+            print('---- Stake key detected ' + current_wallet.addresses[0].address)
+            current_wallet.stake_address = current_wallet.addresses[0].address
 
-        # Reward history
-        print('-- Get reward history')
-        reward_history_r = None
-        reward_history = []
-        if stake_key is not None:
-            if stake_key not in stake_keys_calculated:
-                print('---- for stake key ' + stake_key)
-                offset = 0
-                new_results = True
-                while new_results:
-                    body = {"_stake_addresses": [stake_key]}
-                    reward_history_r = koios.request_api(KOIOS_BASE_API + 'account_rewards' + '?offset=' + str(offset), body)
-                    new_results = reward_history_r.json()
-                    reward_history.append(reward_history_r.json())
-                    offset += 1000
+        # If there is no stake key given, check if we can find the stake key anyway
+        if current_wallet.stake_address is None:
+            current_wallet.stake_address = blockfrost.get_stake_addr_for_addr(current_wallet.addresses[0].address)
 
-                reward_history = [item for sublist in reward_history for item in sublist]
+        if current_wallet.stake_address.startswith('stake1u'):
+            print('---- Get addresses for ' + current_wallet.stake_address)
+            current_wallet.addresses = blockfrost.get_addresses_for_account(current_wallet.stake_address)
+            print('---- Get controlled amount for ' + current_wallet.stake_address)
+            current_wallet.controlled_amount = blockfrost.get_controlled_amount_for_account(current_wallet.stake_address)
+            print('---- Get status of stake key ' + current_wallet.stake_address)
+            current_wallet.active = blockfrost.get_active_status_for_account(current_wallet.stake_address)
 
-                if len(reward_history) > 0:
-                    for reward in reward_history[0]['rewards']:
-                        config.reward_counter += 1
-                        datetime_delta = (reward['earned_epoch'] - SHELLEY_START_EPOCH) * 5
-                        reward_time = SHELLEY_START_DATETIME + timedelta(days=datetime_delta) + timedelta(days=10)
-                        amount = int(reward['amount']) / 1000000
-                        reward_type = reward['type']
-                        classification = ""
-                        if reward_type == 'member':
-                            classification = 'staked'
-                        elif reward_type == 'leader':
-                            classification = 'master_node'
-                        elif reward_type == 'treasury' or reward_type == 'reserves':
-                            classification = 'bounty'
-                        deposit = ['deposit', reward_time.strftime('%m/%d/%Y %H:%M:%S'), amount, 'ADA', '', '', '', '',
-                                   classification, '', '', '', config.reward_counter]
-                        data_handler.add_row(deposit, csv_data)
+        config.address_counter += len(current_wallet.addresses)
+
+        # Wallet Transaction History
+        for address in current_wallet.addresses:
+            config.tx_counter = 0
+            config.calculated_address_counter += 1
+            clear()
+            config.elapsed_time = time.time() - config.start_time
+            print()
+            print('Calculating wallet ' + str(config.calculated_wallet_counter) + ' of ' + str(config.wallet_counter))
+            print('Calculating address ' + str(config.calculated_address_counter) + ' of ' + str(config.address_counter))
+
+            # Reward history
+            print('-- Get reward history')
+            if current_wallet.stake_address.startswith('stake1u'):
+                if current_wallet.stake_address not in stake_keys_calculated:
+                    print('---- for stake key ' + current_wallet.stake_address)
+                    current_wallet.rewards = koios.get_reward_history_for_account(current_wallet.stake_address)
+                    for row in export_reward_history_for_wallet(current_wallet):
+                        add_row(row, csv_data)
+                    stake_keys_calculated.add(current_wallet.stake_address)
+                else:
+                    print('---- skipping rewards already calculated for ' + current_wallet.stake_address)
             else:
-                print('---- skipping rewards already calculated for ' + stake_key)
-        else:
-            print('---- no stake key found for address: ' + address)
-        stake_keys_calculated.add(stake_key)
+                print('---- no stake key found for address: ' + address.address)
 
-        # Get all transactions for a specific address
-        print('-- Get all transactions for ' + address)
-        addr_txs = []
-        page = 1
-        new_results = True
-        while new_results:
-            addr_txs_r = blockfrost.request_api(BLOCKFROST_BASE_API + 'addresses/' + address + '/transactions' + '?page=' + str(page))
-            new_results = addr_txs_r.json()
-            addr_txs.append(addr_txs_r.json())
-            config.tx_counter += len(new_results)
-            page += 1
-            config.elapsed_time = time.time() - config.start_time
-            print(LINE_CLEAR + '---- Received ' + str(config.tx_counter) + ' TXs - Elapsed Time: ' + str(round(config.elapsed_time, 2)), end='\r')
+            # Get all transactions for a specific address
+            print('-- Get all transactions for ' + address.address)
+            transactions = blockfrost.get_transaction_history_for_addr(address.address)
+            current_wallet.transactions.append(transactions)
+            address.transactions = transactions
+            print(LINE_CLEAR + '---- Received ' + str(config.tx_counter) + ' TXs - Elapsed Time: ' +
+                  str(round(config.elapsed_time, 2)), end='\r')
 
-        addr_txs = [item for sublist in addr_txs for item in sublist]
+        current_wallet.transactions = [item for sublist in current_wallet.transactions for item in sublist]
+        derived_txs = calculate_derived_tx(current_wallet)
 
-        # Get detailed transaction information
-        print('\n-- Get detailed transaction information')
-        txs_details = []
-        c = 1
-        for tx in addr_txs:
-            config.elapsed_time = time.time() - config.start_time
-            print(LINE_CLEAR + '---- for transaction ' + tx['tx_hash'] + ' - Computed TXs: ' + str(c) + '/' + str(config.tx_counter) + ' - Elapsed Time: ' + str(round(config.elapsed_time, 2)), end='\r')
-            tx_details_r = blockfrost.request_api(BLOCKFROST_BASE_API + 'txs/' + tx['tx_hash'])
-            txs_details.append(tx_details_r.json())
-            c += 1
+        # write txs to file
+        for row in export_transaction_history_for_transactions(derived_txs, current_wallet):
+            add_row(row, csv_data)
 
-        # Get UTXOs for all transactions
-        print('\n-- Get transaction UTXOs')
-        txs_utxos = []
-        c = 1
-        for tx in txs_details:
-            config.elapsed_time = time.time() - config.start_time
-            print(LINE_CLEAR + '---- for transaction ' + tx['hash'] + ' - Computed TXs: ' + str(c) + '/' + str(config.tx_counter) + ' - Elapsed Time: ' + str(round(config.elapsed_time, 2)), end='\r')
-            tx_utxo_r = blockfrost.request_api(BLOCKFROST_BASE_API + 'txs/' + tx['hash'] + '/utxos')
-            txs_utxos.append([tx_utxo_r.json(), tx])
-            c += 1
+        # Sanity Checks
+        print()
+        if current_wallet.stake_address.startswith('stake1u'):
+            print('-- Sanity check for controlled amount')
+            derived_controlled_amount = exporters.accointing.sanity_check_controlled_amount(csv_data)
+            if not math.isclose(derived_controlled_amount, current_wallet.controlled_amount / 1000000, abs_tol=0.00000001):
+                print('---- Sanity check for controlled amount failed. Expected: ' + str(
+                    current_wallet.controlled_amount / 1000000) + ' Was: ' + str(
+                    round(derived_controlled_amount, 6)) + ' Diff: ' + str(
+                    round(current_wallet.controlled_amount / 1000000 - derived_controlled_amount, 6)))
+            else:
+                print('---- Sanity check for controlled amount successful. Current ADA amount of wallet: ' + str(
+                    abs(round(derived_controlled_amount, 6))))
 
-        # Filter inputs and outputs
-        print('\n-- Filter inputs and outputs')
-        inputs = []
-        outputs = []
-        reward_withdrawals = []
+        if config.address_counter >= 1 and not current_wallet.stake_address.startswith('stake1u'):
+            print('-- Sanity check for controlled amount of address')
+            amount = blockfrost.get_amount_for_address(address.address)
+            derived_amount = exporters.accointing.sanity_check_amount_for_addresses(current_wallet, csv_data)
+            if not math.isclose(derived_amount, amount / 1000000, abs_tol=0.00000001):
+                print(
+                    '---- Sanity check for address failed. Expected: ' + str(amount / 1000000) + ' Was: ' + str(
+                        round(derived_amount, 6)) + ' Diff: '
+                    + str(abs(round(amount / 1000000 - derived_amount, 6))))
+            else:
+                print('---- Sanity check for controlled amount successful. Current ADA amount of address: ' + str(
+                    abs(round(derived_amount, 6))))
 
-        for tx in txs_utxos:
-            ins = tx[0]['inputs']
-            outs = tx[0]['outputs']
-            if int(tx[1]['withdrawal_count']) > 0:
-                tx_withdrawal_r = blockfrost.request_api(BLOCKFROST_BASE_API + 'txs/' + tx[0]['hash'] + '/withdrawals')
-                if stake_key == tx_withdrawal_r.json()[0]['address'] \
-                        and [tx, tx_withdrawal_r.json()] not in reward_withdrawals:
-                    reward_withdrawals.append([tx_withdrawal_r.json(), tx[1]])
+        write_data(filename, csv_data)
 
-            for i in ins:
-                if i['address'] in addresses:
-                    inputs.append([i, tx[1]])
+    convert_csv_to_xlsx(glob.glob('wallets/*.csv'))
+    end_time = time.time()
+    config.elapsed_time = end_time - config.start_time
+    print('\nTransaction history created successfully in ' + str(round(config.elapsed_time, 4)) + 's using ' + str(config.cache_counter) +
+          ' cached calls and ' + str(config.api_counter) + ' API calls for ' + str(len(config.wallet_files)) + ' wallet(s) with ' +
+          str(config.address_counter) + ' address(es).')
 
-            for o in outs:
-                if o['address'] in addresses:
-                    outputs.append([o, tx[1]])
 
-        # Collect inputs
-        print('-- Calculate withdrawals')
-        for addr in addresses:
-            for i in inputs:
-                if addr in i[0]['address']:
-                    tx_time = datetime.utcfromtimestamp(i[1]['block_time']).strftime('%m/%d/%Y %H:%M:%S')
-                    amount = i[0]['amount']
-                    quantity = int(amount[0]['quantity']) / 1000000
-                    fee = int(i[1]['fees']) / 1000000
-                    tx_hash = i[1]['hash']
-                    address = i[0]['address']
-                    output_index = i[0]['output_index']
-                    withdraw = ['withdraw', tx_time, '', '', quantity, 'ADA', fee, 'ADA', '', tx_hash, '', address, output_index]
-                    data_handler.add_row(withdraw, csv_data)
-
-        # Collect outputs
-        print('-- Calculate deposits')
-        for addr in addresses:
-            for o in outputs:
-                if addr in o[0]['address']:
-                    tx_time = datetime.utcfromtimestamp(o[1]['block_time']).strftime('%m/%d/%Y %H:%M:%S')
-                    amount = o[0]['amount']
-                    quantity = int(amount[0]['quantity']) / 1000000
-                    tx_hash = o[1]['hash']
-                    address = o[0]['address']
-                    output_index = o[0]['output_index']
-                    deposit = ['deposit', tx_time, quantity, 'ADA', '', '', '', '', '', tx_hash, '', address, output_index]
-                    data_handler.add_row(deposit, csv_data)
-
-        # Collect reward withdrawals
-        print('-- Calculate reward withdrawals')
-        for reward_withdrawal in reward_withdrawals:
-            tx_time = datetime.utcfromtimestamp(reward_withdrawal[1]['block_time']).strftime('%m/%d/%Y %H:%M:%S')
-            amount = reward_withdrawal[0][0]['amount']
-            tx_hash = reward_withdrawal[1]['hash']
-            withdraw = ['withdraw', tx_time, '', '', int(amount) / 1000000, 'ADA', '', '', '', tx_hash, '', '', '']
-            data_handler.add_row(withdraw, csv_data)
-
-    data_handler.write_data(filename, csv_data)
-
-data_handler.convert_csv_to_xlsx(glob.glob('wallets/*.csv'))
-end_time = time.time()
-config.elapsed_time = end_time - config.start_time
-print('\nTransaction history created successfully in ' + str(round(config.elapsed_time, 4)) + 's using ' + str(config.cache_counter) +
-      ' cached calls and ' + str(config.api_counter) + ' API calls for ' + str(len(config.wallet_files)) + ' wallet(s) with ' +
-      str(config.address_counter) + ' address(/)es).')
+if __name__ == "__main__":
+    main()

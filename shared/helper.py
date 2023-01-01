@@ -2,7 +2,7 @@
 from os import system, name
 
 
-def clear():
+def clear() -> None:
     # for windows
     if name == 'nt':
         _ = system('cls')
