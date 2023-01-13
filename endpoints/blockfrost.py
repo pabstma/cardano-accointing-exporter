@@ -6,57 +6,30 @@ import requests as requests
 from requests import Response
 
 import config
-from config import PROJECT_ID, BLOCKFROST_BASE_API
+from config import BLOCKFROST_BASE_API
 from shared.representations import *
 
+headers = None
+
 # HTTP header
-headers = {
-    'project_id': PROJECT_ID
-}
+def init_header() -> None:
+    global headers
+    headers = {
+        'project_id': config.PROJECT_ID
+    }
 
 
-# Function to request the api with simple builtin retry
-def request_api(url: str) -> Response:
-    retries = 0
-    response_code = None
-    while response_code != 200 and retries <= 20:
-        if retries > 0:
-            sleep(retries * 5)
-            print('Response code was: ' + str(response_code) + ' -> Retrying ' + str(retries) + '...')
-        response = requests.get(url, headers=headers)
-        response_code = response.status_code
-        check_cached(response)
-        config.request_time = time.time()
-        retries += 1
-    if response_code != 200:
-        print('Response code was: ' + str(response_code) + ' -> Exiting after 20 retries...')
-        exit(1)
-        check_content(response)
-
-    return response
+# Check backend health
+def check_health() -> bool:
+    health = __request_api(BLOCKFROST_BASE_API + 'health').json()['is_healthy']
+    return health
 
 
-# Function to check if the response was cached; needed for limiting api requests
-def check_cached(response: Response) -> None:
-    config.elapsed_time = time.time() - config.start_time
-    elapsed_since_request = time.time() - config.request_time
-    if not getattr(response, 'from_cache', False):
-        config.api_counter += 1
-        if config.elapsed_time > 5 and elapsed_since_request < 0.1 and (config.api_counter % 1100) > 600:
-            sleep(0.1 - elapsed_since_request)
-    else:
-        config.cache_counter += 1
-
-
-# Check if the received response content type is json
-def check_content(response: Response) -> None:
-    if response is not None:
-        if 'json' not in response.headers.get('Content-Type'):
-            print('The content type of the received data is not json but ' + response.headers)
-            exit(1)
-    else:
-        print('No response was received -> Exiting...')
-        exit(1)
+# Check project id
+def check_project_id() -> bool:
+    print(headers)
+    __request_api(BLOCKFROST_BASE_API)
+    return True
 
 
 def get_addresses_for_account(stake_addr: str) -> List[Address]:
@@ -65,7 +38,7 @@ def get_addresses_for_account(stake_addr: str) -> List[Address]:
     addresses_r = True
     addresses = []
     while addresses_r:
-        addresses_r = request_api(BLOCKFROST_BASE_API + 'accounts/' + stake_addr + '/addresses' + '?page=' + str(page)).json()
+        addresses_r = __request_api(BLOCKFROST_BASE_API + 'accounts/' + stake_addr + '/addresses' + '?page=' + str(page)).json()
         page += 1
         for address in addresses_r:
             addresses.append(Address(address['address'], [], []))
@@ -73,19 +46,19 @@ def get_addresses_for_account(stake_addr: str) -> List[Address]:
 
 
 def get_controlled_amount_for_account(stake_addr: str) -> int:
-    return int(request_api(BLOCKFROST_BASE_API + 'accounts/' + stake_addr).json()['controlled_amount'])
+    return int(__request_api(BLOCKFROST_BASE_API + 'accounts/' + stake_addr).json()['controlled_amount'])
 
 
 def get_amount_for_address(addr: str) -> int:
-    return int(request_api(BLOCKFROST_BASE_API + 'addresses/' + addr).json()['amount'][0]['quantity'])
+    return int(__request_api(BLOCKFROST_BASE_API + 'addresses/' + addr).json()['amount'][0]['quantity'])
 
 
 def get_active_status_for_account(stake_addr: str) -> bool:
-    return bool(request_api(BLOCKFROST_BASE_API + 'accounts/' + stake_addr).json()['active'])
+    return bool(__request_api(BLOCKFROST_BASE_API + 'accounts/' + stake_addr).json()['active'])
 
 
 def get_stake_addr_for_addr(addr: str) -> str:
-    return str(request_api(BLOCKFROST_BASE_API + 'addresses/' + addr).json()['stake_address'])
+    return str(__request_api(BLOCKFROST_BASE_API + 'addresses/' + addr).json()['stake_address'])
 
 
 def get_transaction_history_for_addr(addr: str) -> List[Transaction]:
@@ -94,7 +67,7 @@ def get_transaction_history_for_addr(addr: str) -> List[Transaction]:
     page = 1
     addr_txs_r = True
     while addr_txs_r:
-        addr_txs_r = request_api(BLOCKFROST_BASE_API + 'addresses/' + addr + '/transactions' + '?page=' + str(page)).json()
+        addr_txs_r = __request_api(BLOCKFROST_BASE_API + 'addresses/' + addr + '/transactions' + '?page=' + str(page)).json()
         txs_history.append(addr_txs_r)
         config.tx_counter += len(addr_txs_r)
         page += 1
@@ -124,12 +97,56 @@ def get_transaction_history_for_addr(addr: str) -> List[Transaction]:
     return txs
 
 
+# Function to request the api with simple builtin retry
+def __request_api(url: str) -> Response:
+    retries = 0
+    response_code = None
+    while response_code != 200 and retries <= 20:
+        if retries > 0:
+            sleep(retries * 5)
+            print('Response code was: ' + str(response_code) + ' -> Retrying ' + str(retries) + '...')
+        response = requests.get(url, headers=headers)
+        response_code = response.status_code
+        __check_cached(response)
+        config.request_time = time.time()
+        retries += 1
+    if response_code != 200:
+        print('Response code was: ' + str(response_code) + ' -> Exiting after 20 retries...')
+        exit(1)
+        __check_content(response)
+
+    return response
+
+
+# Function to check if the response was cached; needed for limiting api requests
+def __check_cached(response: Response) -> None:
+    config.elapsed_time = time.time() - config.start_time
+    elapsed_since_request = time.time() - config.request_time
+    if not getattr(response, 'from_cache', False):
+        config.api_counter += 1
+        if config.elapsed_time > 5 and elapsed_since_request < 0.1 and (config.api_counter % 1100) > 600:
+            sleep(0.1 - elapsed_since_request)
+    else:
+        config.cache_counter += 1
+
+
+# Check if the received response content type is json
+def __check_content(response: Response) -> None:
+    if response is not None:
+        if 'json' not in response.headers.get('Content-Type'):
+            print('The content type of the received data is not json but ' + response.headers)
+            exit(1)
+    else:
+        print('No response was received -> Exiting...')
+        exit(1)
+
+
 def get_withdrawal_for_transaction(tx_hash: str) -> Response:
-    return request_api(BLOCKFROST_BASE_API + 'txs/' + tx_hash + '/withdrawals')
+    return __request_api(BLOCKFROST_BASE_API + 'txs/' + tx_hash + '/withdrawals')
 
 
 def __get_output_amount_for_transaction(tx_hash: str) -> List[Tuple[str, int]]:
-    output_amount = request_api(BLOCKFROST_BASE_API + 'txs/' + tx_hash).json()['output_amount']
+    output_amount = __request_api(BLOCKFROST_BASE_API + 'txs/' + tx_hash).json()['output_amount']
     output_amounts = []
     for o in output_amount:
         output_amounts.append((o['unit'], int(o['quantity'])))
@@ -137,11 +154,11 @@ def __get_output_amount_for_transaction(tx_hash: str) -> List[Tuple[str, int]]:
 
 
 def __get_detailed_tx_information(tx_hash: str):
-    return request_api(BLOCKFROST_BASE_API + 'txs/' + tx_hash).json()
+    return __request_api(BLOCKFROST_BASE_API + 'txs/' + tx_hash).json()
 
 
 def __get_inputs_for_transaction(tx_hash: str) -> List[Input]:
-    tx_utxos_r = request_api(BLOCKFROST_BASE_API + 'txs/' + tx_hash + '/utxos').json()
+    tx_utxos_r = __request_api(BLOCKFROST_BASE_API + 'txs/' + tx_hash + '/utxos').json()
     tx_utxos = []
 
     for tx_input in tx_utxos_r['inputs']:
@@ -152,7 +169,7 @@ def __get_inputs_for_transaction(tx_hash: str) -> List[Input]:
 
 
 def __get_outputs_for_transaction(tx_hash: str) -> List[Output]:
-    tx_utxos_r = request_api(BLOCKFROST_BASE_API + 'txs/' + tx_hash + '/utxos').json()
+    tx_utxos_r = __request_api(BLOCKFROST_BASE_API + 'txs/' + tx_hash + '/utxos').json()
     tx_utxos = []
 
     for tx_output in tx_utxos_r['outputs']:

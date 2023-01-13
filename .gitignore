@@ -153,3 +153,4 @@ fabric.properties
 cache.sqlite
 http_cache.sqlite
 wallets/
+project.id

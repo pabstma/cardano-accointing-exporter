@@ -11,3 +11,4 @@ requests==2.28.1
 requests-cache==0.9.7
 six==1.16.0
 urllib3==1.26.13
+argparse==1.4.0

@@ -1,13 +1,15 @@
 import glob
 import math
+import sys
 import time
+from os import remove
 
-import requests_cache
-
+import argparse
 import config
 import endpoints.blockfrost as blockfrost
 import endpoints.koios as koios
 import exporters
+import requests_cache
 from config import URLS_EXPIRE_AFTER, LINE_CLEAR
 from exporters.accointing import export_reward_history_for_wallet, export_transaction_history_for_transactions
 from shared.data_handler import extract_addresses_from_file, add_row, calculate_derived_tx, write_data, convert_csv_to_xlsx
@@ -17,6 +19,53 @@ from shared.representations import Wallet
 
 def main():
     config.init()
+
+    parser = argparse.ArgumentParser(description='This program exports the transaction history of one or more wallets in an account-like ' +
+                                                 'style using one of the available exporters.')
+    parser.add_argument('--project-id-file', type=str, help='path to a file containing only your blockfrost.io project id ' +
+                                                            '(has precedence over hard-coded project id in config.py)')
+    parser.add_argument('--purge-cache', help='removes the current cache; forcing refresh of API data', action='store_true')
+    args = parser.parse_args()
+
+    # Handle api-key-file argument
+    if args.project_id_file is not None:
+        try:
+            with open(args.project_id_file, 'r') as f:
+                content = f.read()
+                if content:
+                    config.PROJECT_ID = content.splitlines()[0]
+                else:
+                    print('Given project-id-file is empty. Using project id from config.py if available.')
+                print('Project id ' + args.project_id_file + ' read successfully ', end='')
+                print(u'\u2713')
+        except OSError as e:
+            print(f'Unable to open {args.project_id_file}: {e}', file=sys.stderr)
+            print('Using project id from config.py if available')
+
+    if config.PROJECT_ID == '':
+        print('No blockfrost project id was given but is required. Check -h or --help for information about the usage.')
+        exit(1)
+
+    blockfrost.init_header()
+
+    # Handle purge-cache argument
+    if args.purge_cache:
+        print('Purge Cache ', end='')
+        remove('http_cache.sqlite')
+        print(u'\u2713')
+
+    # Check backend health
+    print('Check backend health ', end='')
+    if not blockfrost.check_health():
+        print('Backend reports unhealthy state. Check https://status.blockfrost.io/ and try again later.')
+        exit(1)
+    print(u'\u2713')
+
+    # Check project id validity
+    print('Check validity of Blockfrost project id ', end='')
+    blockfrost.check_project_id()
+    print(u'\u2713')
+
     requests_cache.install_cache(expire_after=None, urls_expire_after=URLS_EXPIRE_AFTER)
     requests_cache.remove_expired_responses()
 

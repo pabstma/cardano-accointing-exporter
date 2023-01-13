@@ -1,4 +1,5 @@
 import csv
+import sys
 from typing import Any
 
 import pandas as pd
@@ -9,12 +10,17 @@ from shared.representations import *
 
 # Extract addresses from a given file and add the addresses to the given wallet
 def extract_addresses_from_file(wallet_file: str) -> List[Address]:
-    file = open(wallet_file, 'r')
-    wallets = file.readlines()
     wallet_list = []
-    for i in range(0, len(wallets)):
-        wallets[i] = wallets[i].strip()
-        wallet_list.append(Address(wallets[i], [], []))
+    try:
+        file = open(wallet_file, 'r')
+        wallets = file.readlines()
+        for i in range(0, len(wallets)):
+            wallets[i] = wallets[i].strip()
+            wallet_list.append(Address(wallets[i], [], []))
+    except OSError as e:
+        print(f"Unable to open {wallet_file}: {e}", file=sys.stderr)
+        exit(1)
+
     return wallet_list
 
 
@@ -29,11 +35,15 @@ def write_data(filename: str, csv_data: Any) -> None:
     print('-- Sort calculated data')
     sorted_data = sorted(csv_data, key=lambda x: x[1])
     print('-- Write data on drive')
-    with open(filename, mode='w') as transactions_file:
-        transactions_writer = csv.writer(transactions_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        transactions_writer.writerow(csv_header)
-        for d in sorted_data:
-            transactions_writer.writerow(d)
+    try:
+        with open(filename, mode='w') as transactions_file:
+            transactions_writer = csv.writer(transactions_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+            transactions_writer.writerow(csv_header)
+            for d in sorted_data:
+                transactions_writer.writerow(d)
+    except OSError as e:
+        print(f"Unable to open or write to {filename}: {e}", file=sys.stderr)
+        exit(1)
 
 
 def convert_csv_to_xlsx(csv_files: List[str]) -> None:
