@@ -51,7 +51,7 @@ def check_content(response: Response) -> None:
         exit(1)
 
 
-def get_reward_history_for_account(stake_addr: str) -> List[Reward]:
+def get_reward_history_for_account(stake_addr: str, start_time: datetime, end_time: datetime) -> List[Reward]:
     reward_history = []
     rewards = []
     offset = 0
@@ -69,9 +69,10 @@ def get_reward_history_for_account(stake_addr: str) -> List[Reward]:
         for reward in reward_history[0]['rewards']:
             epoch = reward['earned_epoch']
             datetime_delta = (epoch - SHELLEY_START_EPOCH) * 5
-            reward_time = SHELLEY_START_DATETIME + timedelta(days=datetime_delta) + timedelta(days=10)
+            reward_time = (SHELLEY_START_DATETIME + timedelta(days=datetime_delta) + timedelta(days=10)).replace(tzinfo=timezone.utc)
             reward_type = reward['type']
             pool_id = reward['pool_id']
-            rewards.append(Reward(epoch, reward_time.replace(tzinfo=timezone.utc), reward['amount'], pool_id, reward_type))
+            if start_time <= reward_time <= end_time:
+                rewards.append(Reward(epoch, reward_time, reward['amount'], pool_id, reward_type))
 
     return rewards

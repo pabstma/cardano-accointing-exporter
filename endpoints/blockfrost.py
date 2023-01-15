@@ -11,6 +11,7 @@ from shared.representations import *
 
 headers = None
 
+
 # HTTP header
 def init_header() -> None:
     global headers
@@ -27,7 +28,6 @@ def check_health() -> bool:
 
 # Check project id
 def check_project_id() -> bool:
-    print(headers)
     __request_api(BLOCKFROST_BASE_API)
     return True
 
@@ -61,38 +61,44 @@ def get_stake_addr_for_addr(addr: str) -> str:
     return str(__request_api(BLOCKFROST_BASE_API + 'addresses/' + addr).json()['stake_address'])
 
 
-def get_transaction_history_for_addr(addr: str) -> List[Transaction]:
+def get_transaction_history_for_addr(addr: str, start_time: datetime, end_time: datetime) -> List[Transaction]:
     txs_history = []
     txs = []
     page = 1
     addr_txs_r = True
     while addr_txs_r:
         addr_txs_r = __request_api(BLOCKFROST_BASE_API + 'addresses/' + addr + '/transactions' + '?page=' + str(page)).json()
-        txs_history.append(addr_txs_r)
-        config.tx_counter += len(addr_txs_r)
         page += 1
         config.elapsed_time = time.time() - config.start_time
+        if len(addr_txs_r) > 0:
+            config.tx_counter += len(addr_txs_r)
+            if start_time <= datetime.fromtimestamp(addr_txs_r[-1]['block_time'], timezone.utc):
+                if datetime.fromtimestamp(addr_txs_r[0]['block_time'], timezone.utc) <= end_time:
+                    txs_history.append(addr_txs_r)
+                else:
+                    break
 
     txs_history = [item for sublist in txs_history for item in sublist]
 
     if len(txs_history) > 0:
         for tx in txs_history:
-            tx_details = __get_detailed_tx_information(tx['tx_hash'])
-            txs.append(Transaction(tx['tx_hash'],
-                                   datetime.fromtimestamp(tx['block_time'], timezone.utc),
-                                   __get_output_amount_for_transaction(tx['tx_hash']),
-                                   int(tx_details['fees']),
-                                   0,
-                                   0,
-                                   int(tx_details['utxo_count']),
-                                   int(tx_details['withdrawal_count']),
-                                   int(tx_details['mir_cert_count']),
-                                   int(tx_details['delegation_count']),
-                                   int(tx_details['stake_cert_count']),
-                                   int(tx_details['pool_update_count']),
-                                   int(tx_details['pool_retire_count']),
-                                   __get_inputs_for_transaction(tx['tx_hash']),
-                                   __get_outputs_for_transaction(tx['tx_hash'])))
+            if start_time <= datetime.fromtimestamp(tx['block_time'], timezone.utc) <= end_time:
+                tx_details = __get_detailed_tx_information(tx['tx_hash'])
+                txs.append(Transaction(tx['tx_hash'],
+                                       datetime.fromtimestamp(tx['block_time'], timezone.utc),
+                                       __get_output_amount_for_transaction(tx['tx_hash']),
+                                       int(tx_details['fees']),
+                                       0,
+                                       0,
+                                       int(tx_details['utxo_count']),
+                                       int(tx_details['withdrawal_count']),
+                                       int(tx_details['mir_cert_count']),
+                                       int(tx_details['delegation_count']),
+                                       int(tx_details['stake_cert_count']),
+                                       int(tx_details['pool_update_count']),
+                                       int(tx_details['pool_retire_count']),
+                                       __get_inputs_for_transaction(tx['tx_hash']),
+                                       __get_outputs_for_transaction(tx['tx_hash'])))
 
     return txs
 
