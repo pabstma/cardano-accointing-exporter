@@ -4,6 +4,7 @@ from time import sleep
 
 import requests as requests
 from requests import Response
+from functools import lru_cache
 
 import config
 from config import BLOCKFROST_BASE_API
@@ -35,13 +36,13 @@ def check_project_id() -> bool:
 def get_addresses_for_account(stake_addr: str) -> List[Address]:
     # Get all addresses for the given stake key
     page = 1
-    addresses_r = True
+    addresses_r = Response
     addresses = []
     while addresses_r:
         addresses_r = __request_api(BLOCKFROST_BASE_API + 'accounts/' + stake_addr + '/addresses' + '?page=' + str(page)).json()
         page += 1
         for address in addresses_r:
-            addresses.append(Address(address['address'], [], []))
+            addresses.append(Address(address['address'], [], {}))
     return addresses
 
 
@@ -66,12 +67,13 @@ def get_transaction_history_for_addr(addr: str, start_time: datetime, end_time: 
     txs = []
     page = 1
     addr_txs_r = True
+    print('---- Request all transaction hashes')
     while addr_txs_r:
         addr_txs_r = __request_api(BLOCKFROST_BASE_API + 'addresses/' + addr + '/transactions' + '?page=' + str(page)).json()
         page += 1
         config.elapsed_time = time.time() - config.start_time
         if len(addr_txs_r) > 0:
-            config.tx_counter += len(addr_txs_r)
+
             if start_time <= datetime.fromtimestamp(addr_txs_r[-1]['block_time'], timezone.utc):
                 if datetime.fromtimestamp(addr_txs_r[0]['block_time'], timezone.utc) <= end_time:
                     txs_history.append(addr_txs_r)
@@ -80,6 +82,7 @@ def get_transaction_history_for_addr(addr: str, start_time: datetime, end_time: 
 
     txs_history = [item for sublist in txs_history for item in sublist]
 
+    print('---- Request detailed information for transactions')
     if len(txs_history) > 0:
         for tx in txs_history:
             if start_time <= datetime.fromtimestamp(tx['block_time'], timezone.utc) <= end_time:
@@ -104,6 +107,7 @@ def get_transaction_history_for_addr(addr: str, start_time: datetime, end_time: 
 
 
 # Function to request the api with simple builtin retry
+@lru_cache(maxsize=config.cache_limit)
 def __request_api(url: str) -> Response:
     retries = 0
     response_code = None
@@ -119,8 +123,7 @@ def __request_api(url: str) -> Response:
     if response_code != 200:
         print('Response code was: ' + str(response_code) + ' -> Exiting after 20 retries...')
         exit(1)
-        __check_content(response)
-
+    __check_content(response)
     return response
 
 
@@ -133,7 +136,7 @@ def __check_cached(response: Response) -> None:
         if config.elapsed_time > 5 and elapsed_since_request < 0.1 and (config.api_counter % 1100) > 600:
             sleep(0.1 - elapsed_since_request)
     else:
-        config.cache_counter += 1
+        config.ondisk_cache_counter += 1
 
 
 # Check if the received response content type is json

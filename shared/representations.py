@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 
 
 @dataclass
@@ -43,6 +43,15 @@ class Transaction:
         self.utxo_in_count = len(self.inputs)
         self.utxo_out_count = len(self.outputs)
 
+    def __hash__(self):
+        return hash(self.hash)
+
+    def __eq__(self, other):
+        if isinstance(other, Transaction):
+            return self.hash == other.hash
+        elif isinstance(other, str):
+            return self.hash == other
+
 
 @dataclass
 class Reward:
@@ -57,14 +66,24 @@ class Reward:
 class Address:
     address: str
     amount: List[Tuple[str, int]]
-    transactions: List[Transaction]
+    transactions: Dict[str, Transaction]
+
+    def __hash__(self):
+        return hash(self.address)
+
+    def __eq__(self, other):
+        if isinstance(other, Address):
+            return self.address == other.address
+        elif isinstance(other, str):
+            return self.address == other
 
 
 @dataclass
 class Wallet:
+    name: str
     stake_address: str
     controlled_amount: int
     addresses: List[Address]
-    transactions: List[Transaction]
+    transactions: Dict[str, Transaction]
     rewards: List[Reward]
     active: bool

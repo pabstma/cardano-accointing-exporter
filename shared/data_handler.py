@@ -8,6 +8,21 @@ from exporters.accointing import csv_header
 from shared.representations import *
 
 
+def read_lines(path: str) -> List[str]:
+    lines = []
+    if path is not None:
+        try:
+            with open(path, 'r') as f:
+                content = f.read()
+                if content:
+                    lines = [line.strip() for line in content.splitlines()]
+        except OSError as e:
+            print(f'Unable to open {path}: {e}', file=sys.stderr)
+            print('Please make sure you can access the specified file: ' + path)
+            exit(1)
+    return lines
+
+
 # Extract addresses from a given file and add the addresses to the given wallet
 def extract_addresses_from_file(wallet_file: str) -> List[Address]:
     wallet_list = []
@@ -16,7 +31,7 @@ def extract_addresses_from_file(wallet_file: str) -> List[Address]:
         wallets = file.readlines()
         for i in range(0, len(wallets)):
             wallets[i] = wallets[i].strip()
-            wallet_list.append(Address(wallets[i], [], []))
+            wallet_list.append(Address(wallets[i], [], {}))
     except OSError as e:
         print(f"Unable to open {wallet_file}: {e}", file=sys.stderr)
         exit(1)
@@ -60,7 +75,7 @@ def calculate_derived_tx(wallet: Wallet) -> List[Transaction]:
     for addr in wallet.addresses:
         list_of_addresses.append(addr.address)
 
-    for tx in wallet.transactions:
+    for tx_hash, tx in wallet.transactions.items():
         inputs = []
         outputs = []
         sum_of_inputs = 0

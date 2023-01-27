@@ -1,7 +1,8 @@
+import json
 import time
 from datetime import timedelta, timezone
+from functools import lru_cache
 from time import sleep
-from typing import Any
 
 import requests as requests
 from requests import Response
@@ -12,24 +13,28 @@ from shared.representations import *
 
 
 # Function to POST request the api with a specific body and simple builtin retry
-def request_api(url: str, body: Any) -> Response:
+@lru_cache()
+def __request_api(url: str, body: str) -> Response:
     retries = 0
     response_code = None
     while response_code != 200 and retries < 20:
         if retries > 0:
             sleep(retries * 5)
             print('Response code was: ' + str(response_code) + ' -> Retrying ' + str(retries) + '...')
-        response = requests.post(url, json=body)
+        response = requests.post(url, json=json.loads(body))
         response_code = response.status_code
-        check_cached(response)
+        __check_cached(response)
         config.request_time = time.time()
         retries += 1
-    check_content(response)
+    if response_code != 200:
+        print('Response code was: ' + str(response_code) + ' -> Exiting after 20 retries...')
+        exit(1)
+    __check_content(response)
     return response
 
 
 # Function to check if the response was cached; needed for limiting api requests
-def check_cached(response: Response) -> None:
+def __check_cached(response: Response) -> None:
     config.elapsed_time = time.time() - config.start_time
     elapsed_since_request = time.time() - config.request_time
     if not getattr(response, 'from_cache', False):
@@ -37,11 +42,11 @@ def check_cached(response: Response) -> None:
         if config.elapsed_time > 5 and elapsed_since_request < 0.1:
             sleep(0.1 - elapsed_since_request)
     else:
-        config.cache_counter += 1
+        config.ondisk_cache_counter += 1
 
 
 # Check if the received response content type is json
-def check_content(response: Response) -> None:
+def __check_content(response: Response) -> None:
     if response is not None:
         if 'json' not in response.headers.get('Content-Type'):
             print('The content type of the received data is not json but ' + response.headers)
@@ -58,7 +63,7 @@ def get_reward_history_for_account(stake_addr: str, start_time: datetime, end_ti
     new_results = True
     while new_results:
         body = {"_stake_addresses": [stake_addr]}
-        reward_history_r = request_api(KOIOS_BASE_API + 'account_rewards' + '?offset=' + str(offset), body)
+        reward_history_r = __request_api(KOIOS_BASE_API + 'account_rewards' + '?offset=' + str(offset), json.dumps(body))
         new_results = reward_history_r.json()
         reward_history.append(reward_history_r.json())
         offset += 1000
