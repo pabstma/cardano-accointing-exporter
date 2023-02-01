@@ -14,6 +14,7 @@ import endpoints.koios as koios
 import exporters
 from config import URLS_EXPIRE_AFTER, LINE_CLEAR
 from exporters.accointing import export_reward_history_for_wallet, export_transaction_history_for_transactions
+from shared import api_handler
 from shared.data_handler import extract_addresses_from_file, add_row, calculate_derived_tx, write_data, convert_csv_to_xlsx, read_lines
 from shared.representations import Wallet
 
@@ -214,7 +215,7 @@ def main():
     convert_csv_to_xlsx(glob.glob('wallets/*.csv'))
     end_time = time.time()
     config.elapsed_time = end_time - config.start_time
-    print(f'\nTransaction history created successfully in {round(config.elapsed_time, 4)}s using {blockfrost.__request_api.cache_info()[0]} ' +
+    print(f'\nTransaction history created successfully in {round(config.elapsed_time, 4)}s using {api_handler.get_lru_cache_hit_counter()} ' +
           f'in memory cached calls, {config.ondisk_cache_counter} on disk cached calls and {config.api_counter} API calls for ' +
           f'{len(config.wallet_files)} wallet(s) with {len(config.addresses) - internals_counter} address(es) with {tx_counter} transactions.')
 
