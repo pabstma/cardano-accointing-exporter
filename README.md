@@ -1,31 +1,27 @@
 # Cardano Accointing Exporter
 
-Note: This software is a private project and comes without any warranty. Use it at your own risk!
+This software is provided "as is" without any warranty or liability. Use it at your own risk.
 
-## What is this for?
-This script was specifically made to create an importable history for accointing.com for your Cardano wallets.
-It uses the api provided by blockfrost.io to get the needed data from the blockchain without the need to run a node and
-the toolchain needed to parse it.
+## Purpose
 
-## How does it work?
-The script parses every file in the wallets/ subdirectory with the ending .wallet
-It is expected that a .wallet file contains exactly one address per line or exactly one stake key.
+The purpose of this program is to recreate the transaction history of your Cardano wallets. It uses APIs from [blockfrost.io](https://blockfrost.io/) and [koios.rest](https://www.koios.rest/) to gather data from the Cardano blockchain without the need for running a node or toolchain. Price information is provided by [coingecko](https://www.coingecko.com/en/api). It initially supported the use of an exporter for the [accointing](https://www.accointing.com/) crypto portfolio tracker and crypto tax software, but also provides a generic exporter and the ability to write custom exporters for your desired data format.
 
-0. Make sure you that python3 and virtualenv is installed
-1. Create a free account at https://blockfrost.io/ and find your project id.
-2. Put your project id into the PROJECT_ID variable in the config.py
-3. Create a wallets/ subdirectory in the scripts root directory
-4. Create a .wallet file for every wallet in the wallets/ subdirectory as described above
-5. Create a virtual environment 'virtualenv venv' and source it 'source venv/bin/activate'
-6. Install the dependencies 'pip install -r requirements.txt'
-7. Run the script 'python3 cardano-accointing-exporter.py'
+## Functionality
 
-It will output two files for every found .wallet file: a .csv and a .xlsx file
-The xlsx file can be directly imported into accointing.
+The program reads every file with a '.wallet' extension in the 'wallets/' subdirectory and recreates the transaction history of each wallet using the specified exporter. It outputs two files for each '.wallet' file: a '.csv' and a '.xlsx' file. For example, using the accointing exporter, the '.xlsx' file can be directly imported into accointing.
 
-This script also caches already requested data. Thus reducing the api calls to blockfrost significantly. At the first
-execution the script may take its time. But it should be much faster in subsequent runs. Data that does not change e.g.
-old blocks or transactions are cached indefinitely. Data that frequently changes expires in the cache after a 
-configurable amount of time. The default expiry for an accounts reward history is 5 days and for the transactions of an 
-address 24 hours. Thus, no new rewards or transactions will be recognized within these 5 days or 24 hours caching 
-period. You can always adjust those caching times to your needs in the config.py file.
+## Usage
+
+1. Ensure that python3 and virtualenv are installed
+2. Create a free account on [blockfrost.io](https://blockfrost.io/) and find your project ID
+3. Put your project ID in either a 'project.id' file in the root directory or the 'PROJECT_ID' variable in 'config.py'
+4. Create a 'wallets/' subdirectory in the script's root directory
+5. Create a '.wallet' file for each wallet in the 'wallets/' subdirectory, as described above
+6. Create a virtual environment with 'virtualenv venv' and activate it with 'source venv/bin/activate'
+7. Install dependencies with 'pip install -r requirements.txt'
+8. Check the help section with 'python3 cardano-accointing-exporter.py -h'
+9. Run the program with desired settings
+
+## Notes
+
+The program uses a multi-stage cache approach with in-memory and on-disk caching for API requests, reducing API calls and improving performance. On first execution, the script may take some time, but subsequent runs will be faster. Cached data, such as old blocks or transactions, is stored indefinitely, while frequently changing data expires after a configurable amount of time. You can adjust the caching times in 'config.py' to meet your needs. When recreating the transaction history for many wallets with large amounts of transactions (50k+), the in-memory cache may consume several GB of memory. To avoid memory issues, either run the calculation on fewer wallets at once or set a 'cache_limit' in 'config.py' to limit memory consumption.

@@ -11,9 +11,10 @@ import requests_cache
 import config
 import endpoints.blockfrost as blockfrost
 import endpoints.koios as koios
-import exporters
-from config import URLS_EXPIRE_AFTER, LINE_CLEAR
-from exporters.accointing import export_reward_history_for_wallet, export_transaction_history_for_transactions
+import exporters.accointing_exporter
+import exporters.generic_exporter
+from config import URLS_EXPIRE_AFTER
+from endpoints import coingecko
 from shared import api_handler
 from shared.data_handler import extract_addresses_from_file, add_row, calculate_derived_tx, write_data, convert_csv_to_xlsx, read_lines
 from shared.representations import Wallet
@@ -21,9 +22,10 @@ from shared.representations import Wallet
 
 def main():
     parser = argparse.ArgumentParser(description='This program exports the transaction history of one or more wallets in an account-like ' +
-                                                 'style using one of the available exporters.')
+                                                 'style using one of the available exporters. Note: not all exporters support all features.')
     parser.add_argument('--project-id-file', type=str, default='project.id', help='path to a file containing only your blockfrost.io ' +
                         'project id (has precedence over hard-coded project id in config.py, default: project.id)')
+    parser.add_argument('--exporter', type=str, default='accointing', help='the exporter to use (available: accointing, generic, default: accointing)')
     parser.add_argument('--purge-cache', help='removes the current cache; forcing refresh of API data', action='store_true')
     parser.add_argument('--start-time', type=lambda s: datetime.strptime(s, '%Y-%m-%d').replace(tzinfo=timezone.utc),
                         default=datetime.fromtimestamp(0, timezone.utc),
@@ -32,6 +34,7 @@ def main():
                         .replace(hour=23, minute=59, second=59, microsecond=999999, tzinfo=timezone.utc),
                         default=datetime.fromtimestamp(config.start_time, timezone.utc),
                         help='the utc time (inclusive) the transaction history should end at (format: YYYY-mm-dd e.g. 2022-02-19)')
+    parser.add_argument('--currency', type=str, default='usd', help='String of three letter currency code to use (default: usd)')
     parser.add_argument('--no-sanity-check', action='store_false',
                         help='Do not perform sanity checks of calculated amount against on chain data (sanity checks are always disabled ' +
                              'when using custom --start-time and --end-time values)')
@@ -60,6 +63,15 @@ def main():
 
     blockfrost.init_header()
 
+    # Handle exporter argument
+    if args.exporter == 'accointing':
+        exporter = exporters.accointing_exporter
+    elif args.exporter == 'generic':
+        exporter = exporters.generic_exporter
+    else:
+        print('Given exporter is not supported. Check -h or --help for information about the usage.')
+        exit(1)
+
     # Handle purge-cache argument
     if args.purge_cache:
         print('Purge Cache ', end='')
@@ -83,6 +95,14 @@ def main():
         print(f'Internals file "{args.internals_file}" read successfully ', end='')
         print(u'\u2713')
     internals_counter = len(config.addresses)
+
+    # Handle currency argument
+    if args.currency is not None:
+        if not args.currency in coingecko.get_supported_vs_currencies():
+            print(f'Given currency "{args.currency}" is not supported. ' +
+                  'Check https://www.coingecko.com/api/documentations/v3#/simple/get_simple_supported_vs_currencies for a list of supported currencies.')
+            exit(1)
+    currency = args.currency
 
     # Handle sanity-check argument
     if args.start_time != datetime.fromtimestamp(0, timezone.utc) or args.end_time != datetime.fromtimestamp(config.start_time, timezone.utc):
@@ -164,7 +184,7 @@ def main():
                     print('-- Get reward history')
                     print(f'---- for stake key {current_wallet.stake_address}')
                     current_wallet.rewards = koios.get_reward_history_for_account(current_wallet.stake_address, args.start_time, args.end_time)
-                    reward_history = export_reward_history_for_wallet(current_wallet)
+                    reward_history = exporter.export_reward_history_for_wallet(current_wallet, currency)
                     for row in reward_history:
                         add_row(row, csv_data)
                     stake_keys_calculated.add(current_wallet.stake_address)
@@ -179,21 +199,20 @@ def main():
             for tx in transactions:
                 current_wallet.transactions[tx.hash] = tx
             address.transactions = transactions
-            print(f'{LINE_CLEAR}---- Received {addr_tx_counter} TXs - Elapsed Time: {round(config.elapsed_time, 2)}')
+            print(f'---- Received {addr_tx_counter} TXs - Elapsed Time: {round(config.elapsed_time, 2)}')
 
-        # current_wallet.transactions = [item for sublist in current_wallet.transactions for item in sublist]
         derived_txs = calculate_derived_tx(current_wallet)
 
         # write txs to file
         print('---- Deriving transactions')
-        for row in export_transaction_history_for_transactions(derived_txs, current_wallet):
+        for row in exporter.export_transaction_history_for_transactions(derived_txs, current_wallet, currency):
             add_row(row, csv_data)
 
         # Sanity Checks
         if args.no_sanity_check:
             if current_wallet.stake_address.startswith('stake1u'):
                 print('-- Sanity check for controlled amount')
-                derived_controlled_amount = exporters.accointing.sanity_check_controlled_amount(csv_data)
+                derived_controlled_amount = exporter.sanity_check_controlled_amount(csv_data)
                 if not math.isclose(derived_controlled_amount, current_wallet.controlled_amount / 1000000, abs_tol=0.00000001):
                     print(f'---- Sanity check for controlled amount failed. Expected: {current_wallet.controlled_amount / 1000000} ' +
                           f'Was: {round(derived_controlled_amount, 6)} Diff: {round(current_wallet.controlled_amount / 1000000 - derived_controlled_amount, 6)}')
@@ -203,19 +222,21 @@ def main():
             if address_counter >= 1 and not current_wallet.stake_address.startswith('stake1u'):
                 print('-- Sanity check for controlled amount of address')
                 amount = blockfrost.get_amount_for_address(address.address)
-                derived_amount = exporters.accointing.sanity_check_amount_for_addresses(current_wallet, csv_data)
+                derived_amount = exporter.sanity_check_amount_for_addresses(current_wallet, csv_data)
                 if not math.isclose(derived_amount, amount / 1000000, abs_tol=0.00000001):
                     print(f'---- Sanity check for address failed. Expected: {amount / 1000000} Was: {round(derived_amount, 6)} ' +
                           f'Diff: {abs(round(amount / 1000000 - derived_amount, 6))}')
                 else:
                     print(f'---- Sanity check for controlled amount successful. Current ADA amount of address: {abs(round(derived_amount, 6))}')
 
-        write_data(current_wallet.name + '.csv', csv_data)
+        write_data(current_wallet.name + '.csv', exporter.csv_header, csv_data, exporter.sorting_key)
 
+    print('\nConvert CSV to XLSX ', end='')
+    print(u'\u2713')
     convert_csv_to_xlsx(glob.glob('wallets/*.csv'))
     end_time = time.time()
     config.elapsed_time = end_time - config.start_time
-    print(f'\nTransaction history created successfully in {round(config.elapsed_time, 4)}s using {api_handler.get_lru_cache_hit_counter()} ' +
+    print(f'Transaction history created successfully in {round(config.elapsed_time, 4)}s using {api_handler.get_lru_cache_hit_counter()} ' +
           f'in memory cached calls, {config.ondisk_cache_counter} on disk cached calls and {config.api_counter} API calls for ' +
           f'{len(config.wallet_files)} wallet(s) with {len(config.addresses) - internals_counter} address(es) with {tx_counter} transactions.')
 

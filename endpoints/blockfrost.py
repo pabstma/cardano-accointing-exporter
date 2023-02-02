@@ -1,13 +1,14 @@
 import json
 import time
-from datetime import timezone
+from datetime import timezone, datetime
+from typing import List, Tuple
 
 from requests import Response
 
 import config
 from config import BLOCKFROST_BASE_API
 from shared import api_handler
-from shared.representations import *
+from shared.representations import Address, Transaction, Input, Output
 
 headers = ''
 
@@ -40,6 +41,7 @@ def get_addresses_for_account(stake_addr: str) -> List[Address]:
         page += 1
         for address in addresses_r:
             addresses.append(Address(address['address'], [], {}))
+
     return addresses
 
 
@@ -112,6 +114,7 @@ def __get_output_amount_for_transaction(tx_hash: str) -> List[Tuple[str, int]]:
     output_amounts = []
     for o in output_amount:
         output_amounts.append((o['unit'], int(o['quantity'])))
+
     return output_amounts
 
 
@@ -122,7 +125,6 @@ def __get_detailed_tx_information(tx_hash: str):
 def __get_inputs_for_transaction(tx_hash: str) -> List[Input]:
     tx_utxos_r = api_handler.get_request_api(BLOCKFROST_BASE_API + 'txs/' + tx_hash + '/utxos', headers).json()
     tx_utxos = []
-
     for tx_input in tx_utxos_r['inputs']:
         tx_utxos.append(Input(tx_input['address'], [(tx_input['amount'][0]['unit'], int(tx_input['amount'][0]['quantity']))], tx_hash,
                               tx_input['output_index'], tx_input['collateral']))
@@ -133,7 +135,6 @@ def __get_inputs_for_transaction(tx_hash: str) -> List[Input]:
 def __get_outputs_for_transaction(tx_hash: str) -> List[Output]:
     tx_utxos_r = api_handler.get_request_api(BLOCKFROST_BASE_API + 'txs/' + tx_hash + '/utxos', headers).json()
     tx_utxos = []
-
     for tx_output in tx_utxos_r['outputs']:
         tx_utxos.append(Output(tx_output['address'], [(tx_output['amount'][0]['unit'], int(tx_output['amount'][0]['quantity']))], tx_hash,
                                tx_output['output_index'], tx_output['collateral']))

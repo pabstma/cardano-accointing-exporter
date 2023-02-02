@@ -1,11 +1,10 @@
 import csv
 import sys
-from typing import Any
+from typing import Any, List
 
 import pandas as pd
 
-from exporters.accointing import csv_header
-from shared.representations import *
+from shared.representations import Address, Transaction, Wallet
 
 
 def read_lines(path: str) -> List[str]:
@@ -17,9 +16,10 @@ def read_lines(path: str) -> List[str]:
                 if content:
                     lines = [line.strip() for line in content.splitlines()]
         except OSError as e:
-            print(f'Unable to open {path}: {e}', file=sys.stderr)
+            print(f'Unable to read {path}: {e}', file=sys.stderr)
             print('Please make sure you can access the specified file: ' + path)
             exit(1)
+
     return lines
 
 
@@ -27,13 +27,13 @@ def read_lines(path: str) -> List[str]:
 def extract_addresses_from_file(wallet_file: str) -> List[Address]:
     wallet_list = []
     try:
-        file = open(wallet_file, 'r')
-        wallets = file.readlines()
+        with open(wallet_file, 'r') as f:
+            wallets = f.readlines()
         for i in range(0, len(wallets)):
             wallets[i] = wallets[i].strip()
             wallet_list.append(Address(wallets[i], [], {}))
     except OSError as e:
-        print(f"Unable to open {wallet_file}: {e}", file=sys.stderr)
+        print(f"Unable to read {wallet_file}: {e}", file=sys.stderr)
         exit(1)
 
     return wallet_list
@@ -46,9 +46,9 @@ def add_row(data, csv_data: Any) -> None:
 
 
 # Write csv data into file
-def write_data(filename: str, csv_data: Any) -> None:
+def write_data(filename: str, csv_header: str, csv_data: Any, sorting_key: int) -> None:
     print('-- Sort calculated data')
-    sorted_data = sorted(csv_data, key=lambda x: x[1])
+    sorted_data = sorted(csv_data, key=lambda x: x[sorting_key])
     print('-- Write data on drive')
     try:
         with open(filename, mode='w') as transactions_file:

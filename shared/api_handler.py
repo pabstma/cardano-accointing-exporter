@@ -1,4 +1,3 @@
-# Function to request the api with simple builtin retry
 import json
 import time
 from functools import lru_cache

@@ -6,9 +6,10 @@ from shared.representations import Wallet, Transaction
 
 csv_header = ['transactionType', 'date', 'inBuyAmount', 'inBuyAsset', 'outSellAmount', 'outSellAsset', 'feeAmount (optional)',
               'feeAsset (optional)', 'classification (optional)', 'operationId (optional)', 'comments (optional)']
+sorting_key = 1
 
 
-def export_reward_history_for_wallet(wallet: Wallet) -> List[Any]:
+def export_reward_history_for_wallet(wallet: Wallet, currency: str) -> List[Any]:
     rewards = []
     if len(wallet.rewards) > 0:
         for reward in wallet.rewards:
@@ -21,13 +22,13 @@ def export_reward_history_for_wallet(wallet: Wallet) -> List[Any]:
             elif reward.type == 'treasury' or reward.type == 'reserves':
                 classification = 'bounty'
             rewards.append(['deposit', reward.reward_time, amount, 'ADA', '', '', '', '', classification, '', ''])
+
     return rewards
 
 
-def export_transaction_history_for_transactions(transactions: List[Transaction], wallet: Wallet) -> List[List[Any]]:
+def export_transaction_history_for_transactions(transactions: List[Transaction], wallet: Wallet, currency: str) -> List[List[Any]]:
     tx_csv = []
     for tx in transactions:
-
         if tx.withdrawal_count > 0:
             withdrawal = get_withdrawal_for_transaction(tx.hash).json()
             withdrawal_address = withdrawal[0]['address']
@@ -85,7 +86,6 @@ def export_transaction_history_for_transactions(transactions: List[Transaction],
                 if wtx_utxo.address not in config.addresses:
                     internal = False
                     break
-
             if internal:
                 tx_csv[-1][0] = 'internal'
 
@@ -101,6 +101,7 @@ def sanity_check_controlled_amount(csv_data) -> float:
             derived_amount = derived_amount - float(row[4])
         if row[6] != '':
             derived_amount = derived_amount - float(row[6])
+
     return derived_amount
 
 
@@ -110,7 +111,6 @@ def sanity_check_amount_for_addresses(wallet: Wallet, csv_data) -> float:
         tx_hashes = []
         for tx in address.transactions:
             tx_hashes.append(tx.hash)
-
         for row in csv_data:
             if row[9] in tx_hashes:
                 if row[2] != '':

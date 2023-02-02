@@ -1,9 +1,10 @@
 import json
-from datetime import timedelta, timezone
+from datetime import timedelta, timezone, datetime
+from typing import List
 
 from config import SHELLEY_START_EPOCH, SHELLEY_START_DATETIME, KOIOS_BASE_API
 from shared import api_handler
-from shared.representations import *
+from shared.representations import Reward
 
 
 def get_reward_history_for_account(stake_addr: str, start_time: datetime, end_time: datetime) -> List[Reward]:
@@ -29,5 +30,4 @@ def get_reward_history_for_account(stake_addr: str, start_time: datetime, end_ti
             pool_id = reward['pool_id']
             if start_time <= reward_time <= end_time:
                 rewards.append(Reward(epoch, reward_time, reward['amount'], pool_id, reward_type))
-
     return rewards
