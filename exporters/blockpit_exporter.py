@@ -76,7 +76,7 @@ def export_transaction_history_for_transactions(transactions: List[Transaction],
                            '',
                            tx.hash])
         else:
-            print(f'The transaction "{tx.hash}" has a derived output amount of zero, thus not matching any accointing classification. Skipping..')
+            print(f'The transaction "{tx.hash}" has a derived output amount of zero, thus not matching any blockpit classification. Skipping..')
 
         if config.classify_internal_txs:
             internal = True
