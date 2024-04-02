@@ -12,6 +12,7 @@ import config
 import endpoints.blockfrost as blockfrost
 import endpoints.koios as koios
 import exporters.accointing_exporter
+import exporters.blockpit_exporter
 import exporters.generic_exporter
 from config import URLS_EXPIRE_AFTER
 from endpoints import coingecko
@@ -25,7 +26,7 @@ def main():
                                                  'style using one of the available exporters. Note: not all exporters support all features.')
     parser.add_argument('--project-id-file', type=str, default='project.id', help='path to a file containing only your blockfrost.io ' +
                         'project id (has precedence over hard-coded project id in config.py, default: project.id)')
-    parser.add_argument('--exporter', type=str, default='accointing', help='the exporter to use (available: accointing, generic, default: accointing)')
+    parser.add_argument('--exporter', type=str, default='accointing', help='the exporter to use (available: accointing, blockpit, generic, default: accointing)')
     parser.add_argument('--purge-cache', help='removes the current cache; forcing refresh of API data', action='store_true')
     parser.add_argument('--start-time', type=lambda s: datetime.strptime(s, '%Y-%m-%d').replace(tzinfo=timezone.utc),
                         default=datetime.fromtimestamp(0, timezone.utc),
@@ -66,6 +67,8 @@ def main():
     # Handle exporter argument
     if args.exporter == 'accointing':
         exporter = exporters.accointing_exporter
+    if args.exporter == 'blockpit':
+        exporter = exporters.blockpit_exporter
     elif args.exporter == 'generic':
         exporter = exporters.generic_exporter
     else:
