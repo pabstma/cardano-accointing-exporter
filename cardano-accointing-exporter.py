@@ -67,7 +67,7 @@ def main():
     # Handle exporter argument
     if args.exporter == 'accointing':
         exporter = exporters.accointing_exporter
-    if args.exporter == 'blockpit':
+    elif args.exporter == 'blockpit':
         exporter = exporters.blockpit_exporter
     elif args.exporter == 'generic':
         exporter = exporters.generic_exporter
