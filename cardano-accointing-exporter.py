@@ -46,6 +46,14 @@ def main():
     parser.add_argument('--internals-file', type=str,
                         help='You can supply a file containing additional addresses that are used to determine internal transfers but are' +
                              ' not used for transaction history creation. One address or stake key per line.')
+    parser.add_argument('--mastersplit', type=int,
+                        help='You can supply an ADA number (e.g. 340) to split masternode deposit as follows: Masternode deposits will be reduced (up) to mastersplit value. ' +
+                             '  If there are left-over masternode rewards, generate three extra transactions with same date as masternode deposit: ' +
+                             ' 1. Deposit transaction of left-over ADA with classification Non-Taxable In' +
+                             ' 2. Withdraw transaction of left-over ADA with classification Payment' +
+                             ' 3. Deposit transaction of left-over ADA with classification Interest.'  +
+                             ' Additionally, after calculation, the total interest ADA within the calculated time window will be displayed on standard out.' +
+                             ' Note: Currently, this parameter is only implemented for the blockpit exporter')
     args = parser.parse_args()
 
     # Handle project id file argument
@@ -98,6 +106,11 @@ def main():
         print(f'Internals file "{args.internals_file}" read successfully ', end='')
         print(u'\u2713')
     internals_counter = len(config.addresses)
+
+    # Handle mastersplit argument
+    mastersplit = 0
+    if args.mastersplit is not None:
+        mastersplit = args.mastersplit
 
     # Handle currency argument
     if args.currency is not None:
@@ -187,7 +200,10 @@ def main():
                     print('-- Get reward history')
                     print(f'---- for stake key {current_wallet.stake_address}')
                     current_wallet.rewards = koios.get_reward_history_for_account(current_wallet.stake_address, args.start_time, args.end_time)
-                    reward_history = exporter.export_reward_history_for_wallet(current_wallet, currency)
+                    if exporter is exporters.blockpit_exporter:
+                        reward_history = exporter.export_reward_history_for_wallet(current_wallet, currency, mastersplit)
+                    else:
+                        reward_history = exporter.export_reward_history_for_wallet(current_wallet, currency)
                     for row in reward_history:
                         add_row(row, csv_data)
                     stake_keys_calculated.add(current_wallet.stake_address)
