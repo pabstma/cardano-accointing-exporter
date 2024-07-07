@@ -9,20 +9,29 @@ csv_header = ['Date (UTC)', 'Integration Name', 'Label', 'Outgoing Asset', 'Outg
 sorting_key = 1
 
 
-def export_reward_history_for_wallet(wallet: Wallet, currency) -> List[Any]:
+def export_reward_history_for_wallet(wallet: Wallet, currency, mastersplit) -> List[Any]:
     rewards = []
+    leftover=0
+    totalleftover=0
     if len(wallet.rewards) > 0:
         for reward in wallet.rewards:
             amount = int(reward.amount) / 1000000
-            classification = ''
             if reward.type == 'member':
-                classification = 'Staking'
-            elif reward.type == 'leader':
-                classification = 'Masternode'
+                 rewards.append([reward.reward_time, wallet.name.split('/')[1], 'Staking', '', '', 'ADA', amount, '', '', '', ''])
             elif reward.type == 'treasury' or reward.type == 'reserves':
-                classification = 'Bounty'
-            rewards.append([reward.reward_time, wallet.name.split('/')[1], classification, '', '', 'ADA', amount, '', '', '', ''])
-
+                rewards.append([reward.reward_time, wallet.name.split('/')[1], 'Bounty', '', '', 'ADA', amount, '', '', '', ''])
+            if reward.type == 'leader':
+                if mastersplit > 0 and amount >= mastersplit:
+                    leftover = amount - mastersplit
+                    totalleftover += leftover
+                    amount = mastersplit
+                rewards.append([reward.reward_time, wallet.name.split('/')[1], 'Masternode', '', '', 'ADA', amount, '', '', '', ''])
+                if (leftover > 0):
+                    rewards.append([reward.reward_time, wallet.name.split('/')[1], 'Non-Taxable In', '', '', 'ADA', leftover, '', '', '', ''])
+                    rewards.append([reward.reward_time, wallet.name.split('/')[1], 'Payment', 'ADA', leftover, '', '', '', '', '', ''])
+                    rewards.append([reward.reward_time, wallet.name.split('/')[1], 'Interest', '', '', 'ADA', leftover, '', '', '', ''])
+    if mastersplit > 0:
+        print(f'---- total interest is: ' + str(totalleftover))
     return rewards
 
 
