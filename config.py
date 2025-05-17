@@ -6,7 +6,7 @@ from typing import Set
 # Configuration variables
 PROJECT_ID = ''
 BLOCKFROST_BASE_API = 'https://cardano-mainnet.blockfrost.io/api/v0/'
-KOIOS_BASE_API = 'https://api.koios.rest/api/v0/'
+KOIOS_BASE_API = 'https://api.koios.rest/api/v1/'
 COINGECKO_BASE_API = 'https://api.coingecko.com/api/v3/'
 SHELLEY_START_EPOCH = 208
 SHELLEY_START_DATETIME = datetime(2020, 7, 29, 21, 44, 51)
