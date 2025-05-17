@@ -95,12 +95,12 @@ def export_transaction_history_for_transactions(transactions: List[Transaction],
 def sanity_check_controlled_amount(csv_data) -> float:
     derived_amount = 0.0
     for row in csv_data:
-        if row[2] != '':
-            derived_amount = derived_amount + float(row[2])
+        if row[6] != '':
+            derived_amount = derived_amount + float(row[6])
         if row[4] != '':
             derived_amount = derived_amount - float(row[4])
-        if row[6] != '':
-            derived_amount = derived_amount - float(row[6])
+        if row[8] != '':
+            derived_amount = derived_amount - float(row[8])
 
     return derived_amount
 
@@ -113,11 +113,11 @@ def sanity_check_amount_for_addresses(wallet: Wallet, csv_data) -> float:
             tx_hashes.append(tx.hash)
         for row in csv_data:
             if row[9] in tx_hashes:
-                if row[2] != '':
-                    derived_amount = derived_amount + float(row[2])
+                if row[6] != '':
+                    derived_amount = derived_amount + float(row[6])
                 if row[4] != '':
                     derived_amount = derived_amount - float(row[4])
-                if row[6] != '':
-                    derived_amount = derived_amount - float(row[6])
+                if row[8] != '':
+                    derived_amount = derived_amount - float(row[8])
 
     return derived_amount
